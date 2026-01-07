@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "10235857944",
+    "project_id": "alert-buddy-dde21",
+    "storage_bucket": "alert-buddy-dde21.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:10235857944:android:2af9a24afc7128573a876d",
+        "android_client_info": {
+          "package_name": "com.altron.alertbuddy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBxUO_UIOlue2bBzfwdnRLEI77wF9B3UlE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
