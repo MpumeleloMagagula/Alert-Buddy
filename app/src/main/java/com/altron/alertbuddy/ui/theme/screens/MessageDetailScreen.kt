@@ -1,4 +1,4 @@
-package com.altron.alertbuddy.ui.screens
+package com.altron.alertbuddy.ui.theme.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -6,7 +6,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -72,7 +74,7 @@ fun MessageDetailScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        Icons.Default.Error,
+                        Icons.Default.Warning,
                         contentDescription = null,
                         modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -87,16 +89,30 @@ fun MessageDetailScreen(
             }
         } else {
             val msg = message!!
-            val severityColor = getSeverityColor(msg.severity)
+            val severityColor = getSeverityColor(msg.severity.name)
             val severityLabel = when (msg.severity) {
                 Severity.CRITICAL -> "Critical"
                 Severity.WARNING -> "Warning"
                 Severity.INFO -> "Info"
             }
             val severityIcon = when (msg.severity) {
-                Severity.CRITICAL -> Icons.Default.Error
+                Severity.CRITICAL -> Icons.Default.Warning
                 Severity.WARNING -> Icons.Default.Warning
                 Severity.INFO -> Icons.Default.Info
+            }
+
+            // Parse metadata outside of composable using remember
+            val parsedMetadata = remember(msg.metadata) {
+                msg.metadata?.let { metadataJson ->
+                    runCatching {
+                        val json = JSONObject(metadataJson)
+                        val result = mutableListOf<Pair<String, String>>()
+                        json.keys().forEach { key ->
+                            result.add(key.replaceFirstChar { it.uppercase() } to json.getString(key))
+                        }
+                        result.toList()
+                    }.getOrNull()
+                } ?: emptyList()
             }
 
             Column(
@@ -160,20 +176,10 @@ fun MessageDetailScreen(
                         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                         MetadataRow("Time", formatDateTime(msg.timestamp))
 
-                        // Parse metadata JSON if available
-                        msg.metadata?.let { metadataJson ->
-                            try {
-                                val json = JSONObject(metadataJson)
-                                json.keys().forEach { key ->
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                                    MetadataRow(
-                                        key.replaceFirstChar { it.uppercase() },
-                                        json.getString(key)
-                                    )
-                                }
-                            } catch (e: Exception) {
-                                // Ignore JSON parsing errors
-                            }
+                        // Render parsed metadata
+                        parsedMetadata.forEach { (key, value) ->
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                            MetadataRow(key, value)
                         }
                     }
 
@@ -287,6 +293,3 @@ private fun formatDateTime(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault())
     return sdf.format(Date(timestamp))
 }
-
-private val Float.sp: androidx.compose.ui.unit.TextUnit
-    get() = androidx.compose.ui.unit.TextUnit(this, androidx.compose.ui.unit.TextUnitType.Sp)

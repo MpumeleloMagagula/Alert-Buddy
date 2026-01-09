@@ -9,7 +9,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.altron.alertbuddy.data.AlertRepository
-import com.altron.alertbuddy.ui.navigation.AlertBuddyNavigation
+import com.altron.alertbuddy.ui.theme.navigation.AlertBuddyNavigation
 import com.altron.alertbuddy.ui.theme.AlertBuddyTheme
 import kotlinx.coroutines.launch
 

@@ -1,6 +1,5 @@
-package com.altron.alertbuddy.ui.screens
+package com.altron.alertbuddy.ui.theme.screens
 
-import android.app.AlertDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -8,8 +7,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.altron.alertbuddy.data.AlertRepository
 import com.altron.alertbuddy.data.User
 import com.altron.alertbuddy.ui.theme.AlertBuddyColors
@@ -121,7 +125,7 @@ fun SettingsScreen(
                 )
                 HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
                 SettingsRow(
-                    icon = Icons.AutoMirrored.Filled.Logout,
+                    icon = Icons.AutoMirrored.Filled.ExitToApp,
                     label = "Sign Out",
                     isDestructive = true,
                     onClick = { showLogoutDialog = true }
@@ -151,7 +155,7 @@ fun SettingsScreen(
                 )
                 HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
                 SettingsRow(
-                    icon = Icons.Default.Business,
+                    icon = Icons.Filled.Build,
                     label = "Company",
                     value = "Altron Digital"
                 )
@@ -267,7 +271,7 @@ private fun SettingsRow(
             }
             if (showChevron) {
                 Icon(
-                    Icons.Default.ChevronRight,
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
@@ -276,6 +280,3 @@ private fun SettingsRow(
         }
     }
 }
-
-private val Float.sp: androidx.compose.ui.unit.TextUnit
-    get() = androidx.compose.ui.unit.TextUnit(this, androidx.compose.ui.unit.TextUnitType.Sp)

@@ -54,7 +54,7 @@
                 android:value="alerting" />
         </service>
 
-        <!-- Boot Receiver to restart service after device reboot -->
+        <!-- Boot Receiver -->
         <receiver
             android:name=".service.BootReceiver"
             android:exported="true">
@@ -68,16 +68,6 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="alert_buddy_critical" />
-
-        <!-- FCM Default Notification Icon -->
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_icon"
-            <!--android:resource="@drawable/ic_notification" />
-
-        <!-- FCM Default Notification Color -->
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_color"
-            <!-- android:resource="@color/primary" /> I will come back later for the FCM colors
 
     </application>
 

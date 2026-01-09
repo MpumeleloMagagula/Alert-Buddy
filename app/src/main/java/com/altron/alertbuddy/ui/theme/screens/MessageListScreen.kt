@@ -1,4 +1,4 @@
-package com.altron.alertbuddy.ui.screens
+package com.altron.alertbuddy.ui.theme.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,7 +9,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -20,14 +22,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.altron.alertbuddy.data.AlertRepository
 import com.altron.alertbuddy.data.Message
 import com.altron.alertbuddy.data.Severity
 import com.altron.alertbuddy.ui.theme.AlertBuddyColors
 import com.altron.alertbuddy.ui.theme.getSeverityColor
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -155,7 +156,7 @@ private fun MessageRow(
     message: Message,
     onClick: () -> Unit
 ) {
-    val severityColor = getSeverityColor(message.severity)
+    val severityColor = getSeverityColor(message.severity.name)
 
     Surface(
         modifier = Modifier
@@ -228,9 +229,9 @@ private fun MessageRow(
 
 @Composable
 private fun SeverityBadge(severity: Severity) {
-    val color = getSeverityColor(severity)
+    val color = getSeverityColor(severity.name)
     val icon = when (severity) {
-        Severity.CRITICAL -> Icons.Default.Error
+        Severity.CRITICAL -> Icons.Default.Warning
         Severity.WARNING -> Icons.Default.Warning
         Severity.INFO -> Icons.Default.Info
     }
@@ -316,9 +317,3 @@ private fun formatRelativeTime(timestamp: Long): String {
         else -> "${days}d ago"
     }
 }
-
-private val Int.sp: androidx.compose.ui.unit.TextUnit
-    get() = this.toFloat().sp
-
-private val Float.sp: androidx.compose.ui.unit.TextUnit
-    get() = androidx.compose.ui.unit.TextUnit(this, androidx.compose.ui.unit.TextUnitType.Sp)

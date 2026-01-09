@@ -1,4 +1,4 @@
-package com.altron.alertbuddy.ui.navigation
+package com.altron.alertbuddy.ui.theme.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
@@ -8,7 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.altron.alertbuddy.data.AlertRepository
-import com.altron.alertbuddy.ui.screens.*
+import com.altron.alertbuddy.ui.theme.screens.*
 
 sealed class Screen(val route: String) {
     object Login : Screen("login")
