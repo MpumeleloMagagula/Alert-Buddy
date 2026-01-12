@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -25,6 +26,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.altron.alertbuddy.R
 import com.altron.alertbuddy.data.AlertRepository
 import kotlinx.coroutines.launch
 
@@ -53,31 +55,18 @@ fun LoginScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Logo placeholder - replace with your actual app icon
-            // Image(
-            //     painter = painterResource(id = R.drawable.ic_app_icon),
-            //     contentDescription = "Alert Buddy Logo",
-            //     modifier = Modifier.size(96.dp)
-            // )
+            // Top spacing to push content down from camera
+            Spacer(modifier = Modifier.height(60.dp))
 
-            // App icon placeholder using a Box
-            Surface(
-                modifier = Modifier.size(96.dp),
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.primary
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "AB",
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
+            // Logo - clean, no wrapper
+            Image(
+                painter = painterResource(id = R.drawable.alert_buddy),
+                contentDescription = "Alert Buddy Logo",
+                modifier = Modifier.size(140.dp),
+                contentScale = ContentScale.Fit
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 

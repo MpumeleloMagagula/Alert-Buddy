@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)      // For Room
     alias(libs.plugins.google.services)  // Firebase / Google Services
+    alias(libs.plugins.kotlin.dokka)             // Documentation generation tool
 
 }
 
