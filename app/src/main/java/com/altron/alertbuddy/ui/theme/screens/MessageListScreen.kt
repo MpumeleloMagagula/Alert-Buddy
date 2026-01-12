@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -26,10 +27,11 @@ import androidx.compose.ui.unit.sp
 import com.altron.alertbuddy.data.AlertRepository
 import com.altron.alertbuddy.data.Message
 import com.altron.alertbuddy.data.Severity
-import com.altron.alertbuddy.ui.theme.AlertBuddyColors
+import com.altron.alertbuddy.service.AlertService
 import com.altron.alertbuddy.ui.theme.getSeverityColor
 import kotlinx.coroutines.launch
 
+// Screen showing list of messages/alerts for a specific channel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageListScreen(
@@ -44,8 +46,10 @@ fun MessageListScreen(
     var isRefreshing by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val hasUnread = messages.any { !it.isRead }
 
+    // Load messages for this channel
     fun loadData() {
         scope.launch {
             messages = repository.getMessagesForChannel(channelId)
@@ -70,12 +74,20 @@ fun MessageListScreen(
             )
         },
         floatingActionButton = {
+            // Show "Mark All Read" button only if there are unread messages
             if (hasUnread) {
                 ExtendedFloatingActionButton(
                     onClick = {
                         scope.launch {
+                            // Mark all messages in channel as read
                             repository.markAllAsReadForChannel(channelId)
                             loadData()
+
+                            // Check if all alerts across app are now read
+                            val unreadCount = repository.getTotalUnreadCount()
+                            if (unreadCount == 0) {
+                                AlertService.stopService(context)
+                            }
                         }
                     },
                     icon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
@@ -139,6 +151,7 @@ fun MessageListScreen(
     }
 }
 
+// Date group header (Today, Yesterday, etc.)
 @Composable
 private fun DateHeader(date: String) {
     Text(
@@ -151,6 +164,7 @@ private fun DateHeader(date: String) {
     )
 }
 
+// Single message row in the list
 @Composable
 private fun MessageRow(
     message: Message,
@@ -170,7 +184,7 @@ private fun MessageRow(
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
-            // Severity bar
+            // Severity color bar on left
             Box(
                 modifier = Modifier
                     .width(4.dp)
@@ -178,7 +192,7 @@ private fun MessageRow(
                     .background(severityColor)
             )
 
-            // Content
+            // Message content
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -227,6 +241,7 @@ private fun MessageRow(
     }
 }
 
+// Severity badge icon
 @Composable
 private fun SeverityBadge(severity: Severity) {
     val color = getSeverityColor(severity.name)
@@ -251,6 +266,7 @@ private fun SeverityBadge(severity: Severity) {
     }
 }
 
+// Empty state when no messages in channel
 @Composable
 private fun EmptyMessagesState() {
     Column(
@@ -280,6 +296,7 @@ private fun EmptyMessagesState() {
     }
 }
 
+// Group messages by date (Today, Yesterday, This Week, Earlier)
 private fun groupMessagesByDate(messages: List<Message>): Map<String, List<Message>> {
     val now = System.currentTimeMillis()
     val dayInMillis = 24 * 60 * 60 * 1000L
@@ -302,6 +319,7 @@ private fun groupMessagesByDate(messages: List<Message>): Map<String, List<Messa
     })
 }
 
+// Format timestamp as relative time (2m ago, 1h ago, etc.)
 private fun formatRelativeTime(timestamp: Long): String {
     val now = System.currentTimeMillis()
     val diff = now - timestamp
