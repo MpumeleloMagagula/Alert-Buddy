@@ -5,17 +5,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
+// Repository for all data operations - alerts, channels, and users
 class AlertRepository(context: Context) {
     private val database = AlertBuddyDatabase.getDatabase(context)
     private val messageDao = database.messageDao()
     private val channelDao = database.channelDao()
     private val userDao = database.userDao()
 
-    // User operations
+    // ==================== User Operations ====================
+
+    // Get the currently logged in user (null if not logged in)
     suspend fun getCurrentUser(): User? = withContext(Dispatchers.IO) {
         userDao.getCurrentUser()
     }
 
+    // Sign in user with email
     suspend fun signIn(email: String): User = withContext(Dispatchers.IO) {
         val user = User(
             id = UUID.randomUUID().toString(),
@@ -25,15 +29,19 @@ class AlertRepository(context: Context) {
         user
     }
 
+    // Sign out - clears all user data
     suspend fun signOut() = withContext(Dispatchers.IO) {
         userDao.deleteAllUsers()
     }
 
-    // Channel operations
+    // ==================== Channel Operations ====================
+
+    // Get all channels with their unread message counts
     suspend fun getChannelsWithUnreadCount(): List<ChannelWithUnreadCount> = withContext(Dispatchers.IO) {
         channelDao.getChannelsWithUnreadCount()
     }
 
+    // Initialize default alert channels
     suspend fun initializeDefaultChannels() = withContext(Dispatchers.IO) {
         val channels = listOf(
             Channel("infinity-dal-ms", "Infinity DAL MS"),
@@ -45,32 +53,42 @@ class AlertRepository(context: Context) {
         channelDao.insertChannels(channels)
     }
 
-    // Message operations
+    // ==================== Message Operations ====================
+
+    // Get all messages for a specific channel
     suspend fun getMessagesForChannel(channelId: String): List<Message> = withContext(Dispatchers.IO) {
         messageDao.getMessagesForChannel(channelId)
     }
 
+    // Get a single message by ID
     suspend fun getMessage(messageId: String): Message? = withContext(Dispatchers.IO) {
         messageDao.getMessage(messageId)
     }
 
+    // Get total count of unread messages across all channels
+    // Used by AlertService to determine if beeping should continue
     suspend fun getTotalUnreadCount(): Int = withContext(Dispatchers.IO) {
         messageDao.getTotalUnreadCount()
     }
 
+    // Mark a single message as read
     suspend fun markAsRead(messageId: String) = withContext(Dispatchers.IO) {
         messageDao.markAsRead(messageId)
     }
 
+    // Mark all messages in a channel as read
     suspend fun markAllAsReadForChannel(channelId: String) = withContext(Dispatchers.IO) {
         messageDao.markAllAsReadForChannel(channelId)
     }
 
+    // Insert a new message (used by FCM service)
     suspend fun insertMessage(message: Message) = withContext(Dispatchers.IO) {
         messageDao.insertMessage(message)
     }
 
-    // Initialize with demo data
+    // ==================== Demo Data ====================
+
+    // Initialize demo data for testing
     suspend fun initializeDemoData() = withContext(Dispatchers.IO) {
         initializeDefaultChannels()
 

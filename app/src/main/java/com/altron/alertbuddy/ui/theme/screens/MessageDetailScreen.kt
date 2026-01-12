@@ -14,12 +14,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.altron.alertbuddy.data.AlertRepository
 import com.altron.alertbuddy.data.Message
 import com.altron.alertbuddy.data.Severity
+import com.altron.alertbuddy.service.AlertService
 import com.altron.alertbuddy.ui.theme.AlertBuddyColors
 import com.altron.alertbuddy.ui.theme.getSeverityColor
 import kotlinx.coroutines.launch
@@ -27,6 +29,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
+// Screen showing full details of a single alert message
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageDetailScreen(
@@ -38,7 +41,9 @@ fun MessageDetailScreen(
     var isLoading by remember { mutableStateOf(true) }
 
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
+    // Load message on screen open
     LaunchedEffect(messageId) {
         message = repository.getMessage(messageId)
         isLoading = false
@@ -66,6 +71,7 @@ fun MessageDetailScreen(
                 CircularProgressIndicator()
             }
         } else if (message == null) {
+            // Message not found state
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -101,7 +107,7 @@ fun MessageDetailScreen(
                 Severity.INFO -> Icons.Default.Info
             }
 
-            // Parse metadata outside of composable using remember
+            // Parse metadata JSON
             val parsedMetadata = remember(msg.metadata) {
                 msg.metadata?.let { metadataJson ->
                     runCatching {
@@ -125,7 +131,7 @@ fun MessageDetailScreen(
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // Severity banner
+                    // Severity banner with title
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -176,7 +182,7 @@ fun MessageDetailScreen(
                         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                         MetadataRow("Time", formatDateTime(msg.timestamp))
 
-                        // Render parsed metadata
+                        // Render additional metadata from JSON
                         parsedMetadata.forEach { (key, value) ->
                             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                             MetadataRow(key, value)
@@ -185,7 +191,7 @@ fun MessageDetailScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Message section
+                    // Message content section
                     Column(
                         modifier = Modifier.padding(horizontal = 16.dp)
                     ) {
@@ -211,7 +217,7 @@ fun MessageDetailScreen(
                         }
                     }
 
-                    // Read indicator
+                    // Acknowledged indicator
                     if (msg.isRead) {
                         Spacer(modifier = Modifier.height(24.dp))
                         Row(
@@ -237,7 +243,7 @@ fun MessageDetailScreen(
                     Spacer(modifier = Modifier.height(24.dp))
                 }
 
-                // Mark as Read button
+                // Mark as Read button (only shown for unread messages)
                 if (!msg.isRead) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -247,8 +253,15 @@ fun MessageDetailScreen(
                         Button(
                             onClick = {
                                 scope.launch {
+                                    // Mark message as read
                                     repository.markAsRead(messageId)
                                     message = message?.copy(isRead = true)
+
+                                    // Check if all alerts are now read - stop service if so
+                                    val unreadCount = repository.getTotalUnreadCount()
+                                    if (unreadCount == 0) {
+                                        AlertService.stopService(context)
+                                    }
                                 }
                             },
                             modifier = Modifier
