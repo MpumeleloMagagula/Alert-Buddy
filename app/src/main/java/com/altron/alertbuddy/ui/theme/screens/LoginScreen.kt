@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -28,8 +29,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.altron.alertbuddy.R
 import com.altron.alertbuddy.data.AlertRepository
+import com.altron.alertbuddy.service.AlertService
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+// Login screen for user authentication
 @Composable
 fun LoginScreen(
     repository: AlertRepository,
@@ -43,6 +47,7 @@ fun LoginScreen(
 
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
 
     val isFormValid = email.isNotBlank() && password.length >= 4
 
@@ -60,7 +65,7 @@ fun LoginScreen(
             // Top spacing to push content down from camera
             Spacer(modifier = Modifier.height(60.dp))
 
-            // Logo - clean, no wrapper
+            // App logo
             Image(
                 painter = painterResource(id = R.drawable.alert_buddy),
                 contentDescription = "Alert Buddy Logo",
@@ -87,7 +92,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
 
-            // Email field
+            // Email input field
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
@@ -110,7 +115,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Password field
+            // Password input field
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
@@ -141,7 +146,7 @@ fun LoginScreen(
                 isError = error != null
             )
 
-            // Error message
+            // Error message display
             if (error != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -162,14 +167,25 @@ fun LoginScreen(
                         isLoading = true
                         error = null
                         try {
+                            // Validate email format
                             if (!email.contains("@")) {
                                 throw Exception("Please enter a valid email address")
                             }
+                            // Validate password length
                             if (password.length < 4) {
                                 throw Exception("Password must be at least 4 characters")
                             }
+
+                            // Sign in and initialize demo data
                             repository.signIn(email.trim())
                             repository.initializeDemoData()
+
+                            // Small delay to ensure database is ready
+                            delay(300)
+
+                            // Start alert service to begin beeping for unread alerts
+                            AlertService.startService(context)
+
                             onLoginSuccess()
                         } catch (e: Exception) {
                             error = e.message ?: "Sign in failed"
