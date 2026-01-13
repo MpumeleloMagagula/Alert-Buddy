@@ -1,5 +1,6 @@
 package com.altron.alertbuddy.ui.theme.screens
 
+import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -33,12 +34,17 @@ import com.altron.alertbuddy.service.AlertService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// Login screen for user authentication
+/**
+ * Login screen for user authentication.
+ * Displays the app logo, email/password fields, and sign-in button.
+ * On successful login, saves login state to SharedPreferences and starts AlertService.
+ */
 @Composable
 fun LoginScreen(
     repository: AlertRepository,
     onLoginSuccess: () -> Unit
 ) {
+    // Form state
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
@@ -49,6 +55,7 @@ fun LoginScreen(
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
 
+    // Form validation - email must not be blank and password must be at least 4 characters
     val isFormValid = email.isNotBlank() && password.length >= 4
 
     Surface(
@@ -62,10 +69,10 @@ fun LoginScreen(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top spacing to push content down from camera
+            // Top spacing to push content down from camera/notch area
             Spacer(modifier = Modifier.height(60.dp))
 
-            // App logo
+            // App logo - make sure alert_buddy.png exists in res/drawable/
             Image(
                 painter = painterResource(id = R.drawable.alert_buddy),
                 contentDescription = "Alert Buddy Logo",
@@ -75,6 +82,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // App title
             Text(
                 text = "Alert Buddy",
                 fontSize = 32.sp,
@@ -84,6 +92,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(4.dp))
 
+            // App tagline
             Text(
                 text = "Critical alerts for Altron teams",
                 style = MaterialTheme.typography.bodyMedium,
@@ -115,7 +124,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Password input field
+            // Password input field with show/hide toggle
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
@@ -176,16 +185,21 @@ fun LoginScreen(
                                 throw Exception("Password must be at least 4 characters")
                             }
 
-                            // Sign in and initialize demo data
+                            // Sign in user and initialize demo data
                             repository.signIn(email.trim())
                             repository.initializeDemoData()
+
+                            // Save login state for BootReceiver to check on device restart
+                            val prefs = context.getSharedPreferences("alert_buddy_prefs", Context.MODE_PRIVATE)
+                            prefs.edit().putBoolean("is_logged_in", true).apply()
 
                             // Small delay to ensure database is ready
                             delay(300)
 
-                            // Start alert service to begin beeping for unread alerts
+                            // Start the alert service to begin monitoring for unread alerts
                             AlertService.startService(context)
 
+                            // Navigate to home screen
                             onLoginSuccess()
                         } catch (e: Exception) {
                             error = e.message ?: "Sign in failed"
@@ -216,7 +230,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Forgot password link
+            // Forgot password link (not implemented yet)
             TextButton(onClick = { /* TODO: Implement forgot password */ }) {
                 Text(
                     text = "Forgot Password?",
@@ -226,7 +240,7 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Footer
+            // Footer text
             Text(
                 text = "For Altron Employees",
                 style = MaterialTheme.typography.bodySmall,

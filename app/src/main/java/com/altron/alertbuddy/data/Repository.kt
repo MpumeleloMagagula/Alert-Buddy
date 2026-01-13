@@ -5,7 +5,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
-// Repository for all data operations - alerts, channels, and users
+/**
+ * Repository for all data operations - alerts, channels, and users.
+ * Acts as a single source of truth for the app's data layer.
+ */
 class AlertRepository(context: Context) {
     private val database = AlertBuddyDatabase.getDatabase(context)
     private val messageDao = database.messageDao()
@@ -14,12 +17,16 @@ class AlertRepository(context: Context) {
 
     // ==================== User Operations ====================
 
-    // Get the currently logged in user (null if not logged in)
+    /**
+     * Get the currently logged in user (null if not logged in)
+     */
     suspend fun getCurrentUser(): User? = withContext(Dispatchers.IO) {
         userDao.getCurrentUser()
     }
 
-    // Sign in user with email
+    /**
+     * Sign in user with email
+     */
     suspend fun signIn(email: String): User = withContext(Dispatchers.IO) {
         val user = User(
             id = UUID.randomUUID().toString(),
@@ -29,19 +36,25 @@ class AlertRepository(context: Context) {
         user
     }
 
-    // Sign out - clears all user data
+    /**
+     * Sign out - clears all user data
+     */
     suspend fun signOut() = withContext(Dispatchers.IO) {
         userDao.deleteAllUsers()
     }
 
     // ==================== Channel Operations ====================
 
-    // Get all channels with their unread message counts
+    /**
+     * Get all channels with their unread message counts
+     */
     suspend fun getChannelsWithUnreadCount(): List<ChannelWithUnreadCount> = withContext(Dispatchers.IO) {
         channelDao.getChannelsWithUnreadCount()
     }
 
-    // Initialize default alert channels
+    /**
+     * Initialize default alert channels
+     */
     suspend fun initializeDefaultChannels() = withContext(Dispatchers.IO) {
         val channels = listOf(
             Channel("infinity-dal-ms", "Infinity DAL MS"),
@@ -55,40 +68,61 @@ class AlertRepository(context: Context) {
 
     // ==================== Message Operations ====================
 
-    // Get all messages for a specific channel
+    /**
+     * Get all messages for a specific channel
+     */
     suspend fun getMessagesForChannel(channelId: String): List<Message> = withContext(Dispatchers.IO) {
         messageDao.getMessagesForChannel(channelId)
     }
 
-    // Get a single message by ID
+    /**
+     * Get a single message by ID
+     */
     suspend fun getMessage(messageId: String): Message? = withContext(Dispatchers.IO) {
         messageDao.getMessage(messageId)
     }
 
-    // Get total count of unread messages across all channels
-    // Used by AlertService to determine if beeping should continue
+    /**
+     * Get total count of unread messages across all channels.
+     * Used by AlertService to determine if beeping should continue.
+     */
     suspend fun getTotalUnreadCount(): Int = withContext(Dispatchers.IO) {
         messageDao.getTotalUnreadCount()
     }
 
-    // Mark a single message as read
+    /**
+     * Mark a single message as read with acknowledgment timestamp
+     */
     suspend fun markAsRead(messageId: String) = withContext(Dispatchers.IO) {
-        messageDao.markAsRead(messageId)
+        messageDao.markAsRead(messageId, System.currentTimeMillis())
     }
 
-    // Mark all messages in a channel as read
+    /**
+     * Mark all messages in a channel as read with acknowledgment timestamp
+     */
     suspend fun markAllAsReadForChannel(channelId: String) = withContext(Dispatchers.IO) {
-        messageDao.markAllAsReadForChannel(channelId)
+        messageDao.markAllAsReadForChannel(channelId, System.currentTimeMillis())
     }
 
-    // Insert a new message (used by FCM service)
+    /**
+     * Insert a new message (used by FCM service)
+     */
     suspend fun insertMessage(message: Message) = withContext(Dispatchers.IO) {
         messageDao.insertMessage(message)
     }
 
+    /**
+     * Delete old messages before a certain timestamp
+     */
+    suspend fun deleteOldMessages(beforeTimestamp: Long) = withContext(Dispatchers.IO) {
+        messageDao.deleteOldMessages(beforeTimestamp)
+    }
+
     // ==================== Demo Data ====================
 
-    // Initialize demo data for testing
+    /**
+     * Initialize demo data for testing
+     */
     suspend fun initializeDemoData() = withContext(Dispatchers.IO) {
         initializeDefaultChannels()
 

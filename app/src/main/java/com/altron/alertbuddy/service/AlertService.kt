@@ -16,17 +16,14 @@ import com.altron.alertbuddy.MainActivity
 import com.altron.alertbuddy.data.AlertBuddyDatabase
 import kotlinx.coroutines.*
 
-// Foreground Service that beeps every 60 seconds when there are unread alerts
-// Only starts after user login, stops when all alerts are acknowledged
 class AlertService : Service() {
 
     companion object {
         private const val TAG = "AlertService"
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "alert_buddy_service"
-        private const val BEEP_INTERVAL_MS = 60_000L // 60 seconds
+        private const val BEEP_INTERVAL_MS = 60_000L
 
-        // Call this after successful login to start monitoring
         fun startService(context: Context) {
             val intent = Intent(context, AlertService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -36,7 +33,6 @@ class AlertService : Service() {
             }
         }
 
-        // Call this to stop the service (logout or all alerts read)
         fun stopService(context: Context) {
             val intent = Intent(context, AlertService::class.java)
             context.stopService(intent)
@@ -48,7 +44,6 @@ class AlertService : Service() {
     private var mediaPlayer: MediaPlayer? = null
     private var isRunning = false
 
-    // Runs every 60 seconds to check for unread alerts
     private val beepRunnable = object : Runnable {
         override fun run() {
             checkUnreadAndBeep()
@@ -66,23 +61,31 @@ class AlertService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Alert Service started")
 
-        // Check if there are unread alerts before starting
-        serviceScope.launch {
-            val database = AlertBuddyDatabase.getDatabase(applicationContext)
-            val unreadCount = database.messageDao().getTotalUnreadCount()
+        // MUST call startForeground immediately - within 5 seconds!
+        startForeground(NOTIFICATION_ID, createNotification("Checking for alerts..."))
 
-            withContext(Dispatchers.Main) {
-                if (unreadCount > 0) {
-                    // Has unread alerts - start the service
-                    startForeground(NOTIFICATION_ID, createNotification("$unreadCount unread alert${if (unreadCount > 1) "s" else ""}"))
-                    isRunning = true
-                    handler.post(beepRunnable)
-                    Log.d(TAG, "Service running - $unreadCount unread alerts")
-                } else {
-                    // No unread alerts - stop immediately
-                    Log.d(TAG, "No unread alerts - stopping service")
-                    stopSelf()
+        // Now check for unread alerts in background
+        serviceScope.launch {
+            try {
+                val database = AlertBuddyDatabase.getDatabase(applicationContext)
+                val unreadCount = database.messageDao().getTotalUnreadCount()
+
+                withContext(Dispatchers.Main) {
+                    if (unreadCount > 0) {
+                        // Has unread alerts - update notification and start beeping
+                        updateNotification("$unreadCount unread alert${if (unreadCount > 1) "s" else ""}")
+                        isRunning = true
+                        handler.post(beepRunnable)
+                        Log.d(TAG, "Service running - $unreadCount unread alerts")
+                    } else {
+                        // No unread alerts - stop the service
+                        Log.d(TAG, "No unread alerts - stopping service")
+                        stopSelf()
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking unread count", e)
+                stopSelf()
             }
         }
 
@@ -101,7 +104,6 @@ class AlertService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    // Check for unread alerts and beep if any exist
     private fun checkUnreadAndBeep() {
         serviceScope.launch {
             try {
@@ -110,12 +112,10 @@ class AlertService : Service() {
 
                 withContext(Dispatchers.Main) {
                     if (unreadCount > 0) {
-                        // Still has unread alerts - beep and continue
                         Log.d(TAG, "Found $unreadCount unread alerts, beeping...")
                         updateNotification("$unreadCount unread alert${if (unreadCount > 1) "s" else ""}")
                         playAlertSound()
                     } else {
-                        // All alerts read - stop the service
                         Log.d(TAG, "All alerts read - stopping service")
                         stopSelf()
                     }
@@ -126,7 +126,6 @@ class AlertService : Service() {
         }
     }
 
-    // Play the alarm/notification sound
     private fun playAlertSound() {
         try {
             mediaPlayer?.release()
@@ -148,7 +147,6 @@ class AlertService : Service() {
         }
     }
 
-    // Create notification channel for Android 8.0+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -165,7 +163,6 @@ class AlertService : Service() {
         }
     }
 
-    // Create the foreground notification
     private fun createNotification(message: String): Notification {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -188,7 +185,6 @@ class AlertService : Service() {
             .build()
     }
 
-    // Update the notification text
     private fun updateNotification(message: String) {
         val notificationManager = getSystemService(NotificationManager::class.java)
         notificationManager.notify(NOTIFICATION_ID, createNotification(message))

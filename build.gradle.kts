@@ -9,4 +9,5 @@ plugins {
     // Modern way: Centralized version management via Version Catalog
     alias(libs.plugins.google.services) apply false
     alias(libs.plugins.google.devtools.ksp) apply false
+
 }

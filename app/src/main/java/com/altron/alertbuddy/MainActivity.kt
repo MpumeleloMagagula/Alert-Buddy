@@ -1,6 +1,7 @@
 package com.altron.alertbuddy
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -12,49 +13,59 @@ import androidx.compose.ui.Modifier
 import com.altron.alertbuddy.data.AlertRepository
 import com.altron.alertbuddy.ui.theme.navigation.AlertBuddyNavigation
 import com.altron.alertbuddy.ui.theme.AlertBuddyTheme
-import kotlinx.coroutines.launch
 
-// Main entry point for Alert Buddy app
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        private const val TAG = "MainActivity"
+    }
 
     private lateinit var repository: AlertRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(TAG, "onCreate started")
+
         enableEdgeToEdge()
 
-        // Initialize data repository
-        repository = AlertRepository(applicationContext)
+        try {
+            repository = AlertRepository(applicationContext)
+            Log.d(TAG, "Repository initialized")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize repository", e)
+        }
 
         setContent {
-            // Track login state: null = checking, true = logged in, false = not logged in
             var isLoggedIn by remember { mutableStateOf<Boolean?>(null) }
-            val scope = rememberCoroutineScope()
 
-            // Check if user is already logged in on app start
             LaunchedEffect(Unit) {
-                val user = repository.getCurrentUser()
-                isLoggedIn = user != null
+                try {
+                    val user = repository.getCurrentUser()
+                    isLoggedIn = user != null
+                    Log.d(TAG, "Login check complete: isLoggedIn = $isLoggedIn")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error checking login state", e)
+                    isLoggedIn = false
+                }
             }
 
             AlertBuddyTheme {
-                // Main container with status bar padding to avoid overlap
                 Surface(
                     modifier = Modifier
                         .fillMaxSize()
                         .statusBarsPadding()
                 ) {
-                    // Show navigation once login state is determined
                     if (isLoggedIn != null) {
+                        Log.d(TAG, "Showing navigation, isLoggedIn = $isLoggedIn")
                         AlertBuddyNavigation(
                             repository = repository,
                             isLoggedIn = isLoggedIn!!,
                             onLoginSuccess = { isLoggedIn = true },
                             onLogout = { isLoggedIn = false }
                         )
-                    }
+
+                    }  }
                 }
             }
-        }
     }
 }

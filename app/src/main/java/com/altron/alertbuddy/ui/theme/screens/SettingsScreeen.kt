@@ -1,5 +1,6 @@
 package com.altron.alertbuddy.ui.theme.screens
 
+import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,15 +18,25 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.altron.alertbuddy.data.AlertRepository
 import com.altron.alertbuddy.data.User
-import com.altron.alertbuddy.ui.theme.AlertBuddyColors
+import com.altron.alertbuddy.service.AlertService
 import kotlinx.coroutines.launch
 
+// Color constants for error/destructive actions
+private val ErrorRed = Color(0xFFDC2626)
+
+/**
+ * Settings screen for app configuration and user account management.
+ * Provides options to view user info, reset demo data, and sign out.
+ * Sign out properly clears SharedPreferences, stops AlertService, and clears user data.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -33,13 +44,16 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     onLogout: () -> Unit
 ) {
+    // State for current user and dialog visibility
     var user by remember { mutableStateOf<User?>(null) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
+    var isLoggingOut by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    // Load current user on screen launch
     LaunchedEffect(Unit) {
         user = repository.getCurrentUser()
     }
@@ -54,13 +68,36 @@ fun SettingsScreen(
                 TextButton(
                     onClick = {
                         scope.launch {
+                            isLoggingOut = true
+
+                            // Step 1: Stop the alert service to stop beeping
+                            AlertService.stopService(context)
+
+                            // Step 2: Clear login state from SharedPreferences
+                            // This prevents BootReceiver from starting service on device restart
+                            val prefs = context.getSharedPreferences("alert_buddy_prefs", Context.MODE_PRIVATE)
+                            prefs.edit().putBoolean("is_logged_in", false).apply()
+
+                            // Step 3: Sign out from repository (clears user from database)
                             repository.signOut()
+
+                            isLoggingOut = false
                             showLogoutDialog = false
+
+                            // Step 4: Navigate back to login screen
                             onLogout()
                         }
-                    }
+                    },
+                    enabled = !isLoggingOut
                 ) {
-                    Text("Sign Out", color = AlertBuddyColors.Error)
+                    if (isLoggingOut) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Sign Out", color = ErrorRed)
+                    }
                 }
             },
             dismissButton = {
@@ -86,7 +123,7 @@ fun SettingsScreen(
                         }
                     }
                 ) {
-                    Text("Reset", color = AlertBuddyColors.Error)
+                    Text("Reset", color = ErrorRed)
                 }
             },
             dismissButton = {
@@ -187,6 +224,9 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * A section container for grouping related settings items.
+ */
 @Composable
 private fun SettingsSection(
     title: String,
@@ -211,24 +251,21 @@ private fun SettingsSection(
     }
 }
 
+/**
+ * A single settings row item with icon, label, optional value, and optional click action.
+ */
 @Composable
 private fun SettingsRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     value: String? = null,
     isDestructive: Boolean = false,
     showChevron: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
-    val contentColor = if (isDestructive)
-        AlertBuddyColors.Error
-    else
-        MaterialTheme.colorScheme.onSurface
-
-    val iconColor = if (isDestructive)
-        AlertBuddyColors.Error
-    else
-        MaterialTheme.colorScheme.onSurfaceVariant
+    // Use red color for destructive actions like Sign Out
+    val contentColor = if (isDestructive) ErrorRed else MaterialTheme.colorScheme.onSurface
+    val iconColor = if (isDestructive) ErrorRed else MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
         modifier = Modifier

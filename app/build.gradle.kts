@@ -1,12 +1,10 @@
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)      // For Room
-    alias(libs.plugins.google.services)  // Firebase / Google Services
+    alias(libs.plugins.google.services)          // Firebase / Google Services
     alias(libs.plugins.kotlin.dokka)             // Documentation generation tool
-
 }
 
 android {
@@ -48,7 +46,6 @@ android {
 }
 
 dependencies {
-
     // Android / Compose
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -69,11 +66,6 @@ dependencies {
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 
-    // 🔥 Firebase (BOM – versions managed by Google)
-    implementation(platform("com.google.firebase:firebase-bom:34.7.0"))
-    implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-messaging")
-
     // Navigation & Lifecycle for Compose
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -89,4 +81,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
+    // Firebase BOM (manages all Firebase versions) - SINGLE declaration
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-analytics")
 }

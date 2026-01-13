@@ -2,14 +2,26 @@ package com.altron.alertbuddy.data
 
 import androidx.room.*
 
-// Severity enum for alert types
+// ==================== Enums ====================
+
+/**
+ * Severity levels for alert messages.
+ * CRITICAL = Red, requires immediate attention
+ * WARNING = Orange, needs monitoring
+ * INFO = Blue, informational only
+ */
 enum class Severity {
     CRITICAL,
     WARNING,
     INFO
 }
 
-// User entity for authentication
+// ==================== Entities ====================
+
+/**
+ * User entity for authentication.
+ * Only one user should exist at a time in the database.
+ */
 @Entity(tableName = "users")
 data class User(
     @PrimaryKey
@@ -18,7 +30,10 @@ data class User(
     val createdAt: Long = System.currentTimeMillis()
 )
 
-// Channel entity
+/**
+ * Channel entity representing an alert channel.
+ * Channels group related alerts together.
+ */
 @Entity(tableName = "channels")
 data class Channel(
     @PrimaryKey
@@ -27,7 +42,10 @@ data class Channel(
     val createdAt: Long = System.currentTimeMillis()
 )
 
-// Message/Alert entity
+/**
+ * Message/Alert entity representing an individual alert.
+ * Messages belong to channels and can be marked as read/acknowledged.
+ */
 @Entity(
     tableName = "messages",
     foreignKeys = [
@@ -47,14 +65,20 @@ data class Message(
     val channelName: String,
     val title: String,
     val message: String,
-    val severity: Severity,
-    val timestamp: Long,
+    val severity: Severity = Severity.INFO,
+    val timestamp: Long = System.currentTimeMillis(),
     val isRead: Boolean = false,
     val acknowledgedAt: Long? = null,
-    val metadata: String? = null // JSON string for extra data
+    val metadata: String? = null  // JSON string for extra data like server name, region
 )
 
-// Data class for channel with unread count
+// ==================== Data Classes (non-Entity) ====================
+
+/**
+ * Data class combining channel info with unread message count and last message time.
+ * Used for displaying channels in the list with badge counts.
+ * Note: This is NOT an @Entity - it's a query result class.
+ */
 data class ChannelWithUnreadCount(
     val id: String,
     val name: String,

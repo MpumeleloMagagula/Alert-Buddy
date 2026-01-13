@@ -1,5 +1,6 @@
 package com.altron.alertbuddy.ui.theme.screens
 
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -7,8 +8,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-//import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
@@ -24,9 +23,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.altron.alertbuddy.data.AlertRepository
 import com.altron.alertbuddy.data.ChannelWithUnreadCount
-import com.altron.alertbuddy.ui.theme.AlertBuddyColors
 import kotlinx.coroutines.launch
 
+// Color constants for severity and badges
+private val CriticalRed = Color(0xFFDC2626)
+private val BadgeRed = Color(0xFFEF4444)
+
+/**
+ * Channel list screen - the main home screen after login.
+ * Displays all alert channels with their unread message counts.
+ * Shows a warning banner if there are any unread alerts.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChannelListScreen(
@@ -34,6 +41,7 @@ fun ChannelListScreen(
     onChannelClick: (channelId: String, channelName: String) -> Unit,
     onSettingsClick: () -> Unit
 ) {
+    // State for channels and loading
     var channels by remember { mutableStateOf<List<ChannelWithUnreadCount>>(emptyList()) }
     var totalUnread by remember { mutableStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
@@ -41,15 +49,22 @@ fun ChannelListScreen(
 
     val scope = rememberCoroutineScope()
 
+    // Function to load/refresh channel data
     fun loadData() {
         scope.launch {
-            channels = repository.getChannelsWithUnreadCount()
-            totalUnread = repository.getTotalUnreadCount()
-            isLoading = false
-            isRefreshing = false
+            try {
+                channels = repository.getChannelsWithUnreadCount()
+                totalUnread = repository.getTotalUnreadCount()
+            } catch (e: Exception) {
+                Log.e("ChannelListScreen", "Error loading data", e)
+            } finally {
+                isLoading = false
+                isRefreshing = false
+            }
         }
     }
 
+    // Load data on screen launch
     LaunchedEffect(Unit) {
         loadData()
     }
@@ -62,6 +77,7 @@ fun ChannelListScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // App icon in header
                         Surface(
                             modifier = Modifier.size(28.dp),
                             shape = RoundedCornerShape(6.dp),
@@ -83,6 +99,7 @@ fun ChannelListScreen(
                     }
                 },
                 actions = {
+                    // Settings button
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
@@ -91,6 +108,7 @@ fun ChannelListScreen(
         }
     ) { paddingValues ->
         if (isLoading) {
+            // Loading state
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -100,6 +118,7 @@ fun ChannelListScreen(
                 CircularProgressIndicator()
             }
         } else {
+            // Pull-to-refresh enabled list
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
                 onRefresh = {
@@ -115,7 +134,7 @@ fun ChannelListScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Unread alert banner
+                    // Show unread alerts banner if there are any
                     if (totalUnread > 0) {
                         item {
                             UnreadBanner(count = totalUnread)
@@ -131,7 +150,7 @@ fun ChannelListScreen(
                         )
                     }
 
-                    // Empty state
+                    // Empty state when no channels
                     if (channels.isEmpty()) {
                         item {
                             EmptyChannelsState()
@@ -143,11 +162,15 @@ fun ChannelListScreen(
     }
 }
 
+/**
+ * Red banner showing total unread alert count.
+ * Displayed at the top of the channel list when there are unread alerts.
+ */
 @Composable
 private fun UnreadBanner(count: Int) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = AlertBuddyColors.Critical,
+        color = CriticalRed,
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
@@ -171,6 +194,9 @@ private fun UnreadBanner(count: Int) {
     }
 }
 
+/**
+ * Individual channel row showing channel name and unread count badge.
+ */
 @Composable
 private fun ChannelRow(
     channel: ChannelWithUnreadCount,
@@ -196,6 +222,7 @@ private fun ChannelRow(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
+                // Channel icon - highlighted if has unread
                 Icon(
                     Icons.Default.Notifications,
                     contentDescription = null,
@@ -204,6 +231,7 @@ private fun ChannelRow(
                     else
                         MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // Channel name - bold if has unread
                 Text(
                     text = channel.name,
                     style = MaterialTheme.typography.bodyLarge,
@@ -215,20 +243,22 @@ private fun ChannelRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Unread count badge
                 if (channel.unreadCount > 0) {
                     Surface(
                         shape = CircleShape,
-                        color = AlertBuddyColors.BadgeBackground
+                        color = BadgeRed
                     ) {
                         Text(
                             text = if (channel.unreadCount > 99) "99+" else channel.unreadCount.toString(),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            color = AlertBuddyColors.BadgeText,
+                            color = Color.White,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
+                // Navigation arrow
                 Icon(
                     Icons.Filled.KeyboardArrowRight,
                     contentDescription = null,
@@ -239,6 +269,9 @@ private fun ChannelRow(
     }
 }
 
+/**
+ * Empty state shown when there are no alert channels.
+ */
 @Composable
 private fun EmptyChannelsState() {
     Column(
@@ -247,7 +280,6 @@ private fun EmptyChannelsState() {
             .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Placeholder for empty state illustration
         Icon(
             Icons.Default.Notifications,
             contentDescription = null,
