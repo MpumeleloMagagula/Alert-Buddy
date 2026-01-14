@@ -11,6 +11,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.altron.alertbuddy.MainActivity
+import com.altron.alertbuddy.R
 import com.altron.alertbuddy.data.AlertBuddyDatabase
 import com.altron.alertbuddy.data.Message
 import com.altron.alertbuddy.data.Severity
@@ -22,6 +23,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+/**
+ * Firebase Cloud Messaging Service for Alert Buddy.
+ * Handles incoming push notifications, stores them in database,
+ * and displays notifications based on severity level.
+ */
 class AlertFirebaseMessagingService : FirebaseMessagingService() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -38,22 +44,29 @@ class AlertFirebaseMessagingService : FirebaseMessagingService() {
         createNotificationChannels()
     }
 
+    /**
+     * Called when a new FCM token is generated.
+     */
     override fun onNewToken(token: String) {
         Log.d(TAG, "New FCM token: $token")
         // TODO: Send token to your server for targeting this device
-        // You would typically call your backend API here to register the token
     }
 
+    /**
+     * Called when a message is received from FCM.
+     */
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         Log.d(TAG, "Message received from: ${remoteMessage.from}")
 
-        // Check if message contains data payload
-        remoteMessage.data.isNotEmpty().let {
+        if (remoteMessage.data.isNotEmpty()) {
             Log.d(TAG, "Message data: ${remoteMessage.data}")
             handleDataMessage(remoteMessage.data)
         }
     }
 
+    /**
+     * Process the data payload from FCM message.
+     */
     private fun handleDataMessage(data: Map<String, String>) {
         val channelId = data["channel"] ?: return
         val channelName = data["channelName"] ?: channelId
@@ -69,7 +82,6 @@ class AlertFirebaseMessagingService : FirebaseMessagingService() {
             else -> Severity.INFO
         }
 
-        // Create message object
         val message = Message(
             id = UUID.randomUUID().toString(),
             channelId = channelId,
@@ -88,15 +100,20 @@ class AlertFirebaseMessagingService : FirebaseMessagingService() {
                 val database = AlertBuddyDatabase.getDatabase(applicationContext)
                 database.messageDao().insertMessage(message)
                 Log.d(TAG, "Message saved to database: ${message.id}")
+
+                // Start AlertService for persistent beeping
+                AlertService.startService(applicationContext)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to save message", e)
             }
         }
 
-        // Show notification
         showNotification(message)
     }
 
+    /**
+     * Display notification based on message severity.
+     */
     private fun showNotification(message: Message) {
         val notificationChannelId = when (message.severity) {
             Severity.CRITICAL -> CHANNEL_ID_CRITICAL
@@ -117,8 +134,8 @@ class AlertFirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notificationBuilder = NotificationCompat.Builder(this, notificationChannelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_alert) // Replace with your app icon
+        val builder = NotificationCompat.Builder(this, notificationChannelId)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(message.title)
             .setContentText(message.message)
             .setAutoCancel(true)
@@ -132,21 +149,22 @@ class AlertFirebaseMessagingService : FirebaseMessagingService() {
                 }
             )
 
-        // Add sound for critical alerts
         if (message.severity == Severity.CRITICAL) {
             val alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            notificationBuilder.setSound(alarmSound)
+            builder.setSound(alarmSound)
         }
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(message.id.hashCode(), notificationBuilder.build())
+        notificationManager.notify(message.id.hashCode(), builder.build())
     }
 
+    /**
+     * Create notification channels for different severity levels.
+     */
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-            // Critical channel - high priority with alarm sound
             val criticalChannel = NotificationChannel(
                 CHANNEL_ID_CRITICAL,
                 "Critical Alerts",
@@ -162,7 +180,6 @@ class AlertFirebaseMessagingService : FirebaseMessagingService() {
                     .build())
             }
 
-            // Warning channel
             val warningChannel = NotificationChannel(
                 CHANNEL_ID_WARNING,
                 "Warning Alerts",
@@ -172,7 +189,6 @@ class AlertFirebaseMessagingService : FirebaseMessagingService() {
                 enableVibration(true)
             }
 
-            // Info channel
             val infoChannel = NotificationChannel(
                 CHANNEL_ID_INFO,
                 "Info Alerts",
