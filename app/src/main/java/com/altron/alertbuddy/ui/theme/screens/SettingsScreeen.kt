@@ -28,6 +28,8 @@ import com.altron.alertbuddy.data.AlertRepository
 import com.altron.alertbuddy.data.User
 import com.altron.alertbuddy.service.AlertService
 import kotlinx.coroutines.launch
+import androidx.compose.material3.*
+
 
 // Color constants for error/destructive actions
 private val ErrorRed = Color(0xFFDC2626)
