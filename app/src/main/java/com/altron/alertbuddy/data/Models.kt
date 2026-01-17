@@ -2,49 +2,74 @@ package com.altron.alertbuddy.data
 
 import androidx.room.*
 
-// ==================== Enums ====================
-
 /**
- * Severity levels for alert messages.
- * CRITICAL = Red, requires immediate attention
- * WARNING = Orange, needs monitoring
- * INFO = Blue, informational only
+ * Severity levels for alerts.
+ * Used to visually distinguish alert importance and trigger different behaviors.
  */
 enum class Severity {
-    CRITICAL,
-    WARNING,
-    INFO
+    CRITICAL,  // Red - Requires immediate attention, loudest beep
+    WARNING,   // Orange - Important but not urgent
+    INFO       // Blue - Informational only
 }
 
-// ==================== Entities ====================
-
 /**
- * User entity for authentication.
- * Only one user should exist at a time in the database.
+ * User entity for authentication and profile management.
+ *
+ * Stores user credentials and profile information locally.
+ * This is the single source of truth for the logged-in user.
  */
 @Entity(tableName = "users")
 data class User(
     @PrimaryKey
     val id: String,
+
+    // Authentication
     val email: String,
-    val createdAt: Long = System.currentTimeMillis()
+
+    // Profile Information
+    val displayName: String? = null,
+    val position: String? = null,  // e.g., "Senior DevOps Engineer", "Support Analyst"
+    val department: String? = null, // e.g., "Infrastructure", "Support"
+    val phoneNumber: String? = null, // For 2FA SMS verification
+
+    // Profile Picture - stores URI or null for initials-based avatar
+    val profilePictureUri: String? = null,
+
+    // Two-Factor Authentication
+    val is2FAEnabled: Boolean = false,
+    val twoFASecret: String? = null, // TOTP secret for authenticator apps
+
+    // Preferences
+    val beepIntervalSeconds: Int = 60, // Default 60 seconds
+    val vibrationEnabled: Boolean = true,
+
+    // Timestamps
+    val createdAt: Long = System.currentTimeMillis(),
+    val lastLoginAt: Long = System.currentTimeMillis()
 )
 
 /**
- * Channel entity representing an alert channel.
- * Channels group related alerts together.
+ * Channel entity representing an alert source/category.
+ *
+ * Channels are different monitoring systems or alert sources:
+ * - Infinity DAL MS
+ * - Nemo
+ * - VSA IT Crisis War Room
  */
 @Entity(tableName = "channels")
 data class Channel(
     @PrimaryKey
     val id: String,
     val name: String,
+    val description: String? = null,
     val createdAt: Long = System.currentTimeMillis()
 )
 
 /**
- * Message/Alert entity representing an individual alert.
- * Messages belong to channels and can be marked as read/acknowledged.
+ * Message/Alert entity - the core data model.
+ *
+ * Represents a single alert from a monitoring system.
+ * Contains all information needed to display and track the alert.
  */
 @Entity(
     tableName = "messages",
@@ -65,23 +90,33 @@ data class Message(
     val channelName: String,
     val title: String,
     val message: String,
-    val severity: Severity = Severity.INFO,
-    val timestamp: Long = System.currentTimeMillis(),
+    val severity: Severity,
+    val timestamp: Long,
     val isRead: Boolean = false,
     val acknowledgedAt: Long? = null,
-    val metadata: String? = null  // JSON string for extra data like server name, region
+    val acknowledgedBy: String? = null, // User ID who acknowledged
+    val metadata: String? = null // JSON string for extra data (server, region, etc.)
 )
 
-// ==================== Data Classes (non-Entity) ====================
-
 /**
- * Data class combining channel info with unread message count and last message time.
- * Used for displaying channels in the list with badge counts.
- * Note: This is NOT an @Entity - it's a query result class.
+ * Data class for channel with aggregated unread count.
+ * Used in the channel list screen to show unread badges.
  */
 data class ChannelWithUnreadCount(
     val id: String,
     val name: String,
     val unreadCount: Int,
     val lastMessageTime: Long?
+)
+
+/**
+ * User preferences for settings that persist independently.
+ * These are stored in DataStore, not Room, for quick access.
+ */
+data class UserPreferences(
+    val beepIntervalSeconds: Int = 60,
+    val vibrationEnabled: Boolean = true,
+    val soundEnabled: Boolean = true,
+    val notificationSoundUri: String? = null,
+    val darkModeEnabled: Boolean = false
 )

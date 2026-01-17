@@ -1,24 +1,23 @@
 package com.altron.alertbuddy.ui.theme.screens
 
 import android.content.Context
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -28,65 +27,112 @@ import com.altron.alertbuddy.data.AlertRepository
 import com.altron.alertbuddy.data.User
 import com.altron.alertbuddy.service.AlertService
 import kotlinx.coroutines.launch
-import androidx.compose.material3.*
-
-
-// Color constants for error/destructive actions
-private val ErrorRed = Color(0xFFDC2626)
+import com.altron.alertbuddy.ui.theme.AlertBuddyColors
 
 /**
- * Settings screen for app configuration and user account management.
- * Provides options to view user info, reset demo data, and sign out.
- * Sign out properly clears SharedPreferences, stops AlertService, and clears user data.
+ * ============================================================================
+ * SettingsScreen.kt - User Profile and App Settings
+ * ============================================================================
+ *
+ * PURPOSE:
+ * Comprehensive settings screen for user profile management and app configuration.
+ *
+ * FEATURES:
+ * - Profile section with avatar (initials-based), name, position
+ * - Account settings (email, 2FA toggle)
+ * - Notification settings (beep interval, vibration)
+ * - Data management (reset demo data)
+ * - App info (version, company)
+ * - Logout functionality
+ *
+ * SECTIONS:
+ * 1. Profile Card - Avatar, display name, position, department
+ * 2. Account - Email, 2FA settings, Sign Out
+ * 3. Notifications - Beep interval, vibration toggle
+ * 4. Data - Reset demo data
+ * 5. About - Version, company info
+ *
+ * SIGN OUT PROCESS:
+ * 1. Stop AlertService - Stops beeping immediately
+ * 2. Clear SharedPreferences - Prevents BootReceiver restart
+ * 3. Clear database - Removes user record
+ * 4. Navigate to login screen
+ *
+ * ============================================================================
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    repository: AlertRepository,
-    onBackClick: () -> Unit,
-    onLogout: () -> Unit
+    repository: AlertRepository,  // Repository for database operations
+    onBackClick: () -> Unit,      // Callback to navigate back
+    onLogout: () -> Unit          // Callback to navigate to login screen
 ) {
-    // State for current user and dialog visibility
+    // ========================================================================
+    // STATE VARIABLES
+    // ========================================================================
+
+    // User data loaded from database
     var user by remember { mutableStateOf<User?>(null) }
+
+    // Dialog visibility states
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
+    var showEditProfileDialog by remember { mutableStateOf(false) }
+    var show2FADialog by remember { mutableStateOf(false) }
+    var showBeepIntervalDialog by remember { mutableStateOf(false) }
+
+    // Loading state
     var isLoggingOut by remember { mutableStateOf(false) }
+
+    // Local state for toggles (synced with user data)
+    var vibrationEnabled by remember { mutableStateOf(true) }
+    var beepInterval by remember { mutableStateOf(60) }
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    // Load current user on screen launch
+    // ========================================================================
+    // LOAD USER DATA
+    // ========================================================================
     LaunchedEffect(Unit) {
         user = repository.getCurrentUser()
+        user?.let {
+            vibrationEnabled = it.vibrationEnabled
+            beepInterval = it.beepIntervalSeconds
+        }
     }
 
-    // Logout confirmation dialog
+    // ========================================================================
+    // LOGOUT CONFIRMATION DIALOG
+    // ========================================================================
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
             title = { Text("Sign Out") },
-            text = { Text("Are you sure you want to sign out?") },
+            text = { Text("Are you sure you want to sign out? You will stop receiving alert notifications.") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         scope.launch {
                             isLoggingOut = true
 
-                            // Step 1: Stop the alert service to stop beeping
+                            // STEP 1: Stop AlertService
                             AlertService.stopService(context)
 
-                            // Step 2: Clear login state from SharedPreferences
-                            // This prevents BootReceiver from starting service on device restart
-                            val prefs = context.getSharedPreferences("alert_buddy_prefs", Context.MODE_PRIVATE)
+                            // STEP 2: Clear SharedPreferences
+                            val prefs = context.getSharedPreferences(
+                                "alert_buddy_prefs",
+                                Context.MODE_PRIVATE
+                            )
                             prefs.edit().putBoolean("is_logged_in", false).apply()
 
-                            // Step 3: Sign out from repository (clears user from database)
+                            // STEP 3: Sign out from repository
                             repository.signOut()
 
                             isLoggingOut = false
                             showLogoutDialog = false
 
-                            // Step 4: Navigate back to login screen
+                            // STEP 4: Navigate to login
                             onLogout()
                         }
                     },
@@ -98,7 +144,7 @@ fun SettingsScreen(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Sign Out", color = ErrorRed)
+                        Text("Sign Out", color = AlertBuddyColors.Error)
                     }
                 }
             },
@@ -110,12 +156,14 @@ fun SettingsScreen(
         )
     }
 
-    // Reset data confirmation dialog
+    // ========================================================================
+    // RESET DEMO DATA DIALOG
+    // ========================================================================
     if (showResetDialog) {
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
             title = { Text("Reset Demo Data") },
-            text = { Text("This will reset all alerts to their initial state. Continue?") },
+            text = { Text("This will reset all alerts to their initial state. Your profile and settings will be preserved.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -125,7 +173,7 @@ fun SettingsScreen(
                         }
                     }
                 ) {
-                    Text("Reset", color = ErrorRed)
+                    Text("Reset", color = AlertBuddyColors.Error)
                 }
             },
             dismissButton = {
@@ -136,6 +184,75 @@ fun SettingsScreen(
         )
     }
 
+    // ========================================================================
+    // EDIT PROFILE DIALOG
+    // ========================================================================
+    if (showEditProfileDialog) {
+        EditProfileDialog(
+            user = user,
+            onDismiss = { showEditProfileDialog = false },
+            onSave = { displayName, position, department ->
+                scope.launch {
+                    user?.let {
+                        repository.updateUserProfile(
+                            userId = it.id,
+                            displayName = displayName,
+                            position = position,
+                            department = department
+                        )
+                        user = repository.getCurrentUser()
+                    }
+                    showEditProfileDialog = false
+                }
+            }
+        )
+    }
+
+    // ========================================================================
+    // 2FA SETUP DIALOG
+    // ========================================================================
+    if (show2FADialog) {
+        TwoFactorAuthDialog(
+            isEnabled = user?.is2FAEnabled ?: false,
+            onDismiss = { show2FADialog = false },
+            onToggle2FA = { enable ->
+                scope.launch {
+                    user?.let {
+                        repository.toggle2FA(it.id, enable)
+                        user = repository.getCurrentUser()
+                    }
+                    show2FADialog = false
+                }
+            }
+        )
+    }
+
+    // ========================================================================
+    // BEEP INTERVAL SELECTION DIALOG
+    // ========================================================================
+    if (showBeepIntervalDialog) {
+        BeepIntervalDialog(
+            currentInterval = beepInterval,
+            onDismiss = { showBeepIntervalDialog = false },
+            onSelect = { interval ->
+                scope.launch {
+                    beepInterval = interval
+                    user?.let {
+                        repository.updateBeepInterval(it.id, interval)
+                        user = repository.getCurrentUser()
+                    }
+                    // Notify AlertService to refresh settings immediately
+                    // This makes the new beep interval take effect without restart
+                    AlertService.refreshSettings(context)
+                    showBeepIntervalDialog = false
+                }
+            }
+        )
+    }
+
+    // ========================================================================
+    // MAIN UI
+    // ========================================================================
     Scaffold(
         topBar = {
             TopAppBar(
@@ -155,14 +272,41 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Account Section
+            // ----------------------------------------------------------------
+            // PROFILE CARD SECTION
+            // Shows avatar with initials, name, position, department
+            // ----------------------------------------------------------------
+            ProfileCard(
+                user = user,
+                onEditClick = { showEditProfileDialog = true }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ----------------------------------------------------------------
+            // ACCOUNT SECTION
+            // Email, 2FA, Sign Out
+            // ----------------------------------------------------------------
             SettingsSection(title = "Account") {
+                // Email row
                 SettingsRow(
                     icon = Icons.Default.Email,
                     label = "Email",
                     value = user?.email ?: "Not signed in"
                 )
                 HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
+
+                // Two-Factor Authentication row
+                SettingsRow(
+                    icon = Icons.Default.Lock,
+                    label = "Two-Factor Authentication",
+                    value = if (user?.is2FAEnabled == true) "Enabled" else "Disabled",
+                    showChevron = true,
+                    onClick = { show2FADialog = true }
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
+
+                // Sign Out row
                 SettingsRow(
                     icon = Icons.AutoMirrored.Filled.ExitToApp,
                     label = "Sign Out",
@@ -173,7 +317,46 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Data Section
+            // ----------------------------------------------------------------
+            // NOTIFICATIONS SECTION
+            // Beep interval and vibration settings
+            // ----------------------------------------------------------------
+            SettingsSection(title = "Notifications") {
+                // Beep interval row
+                SettingsRow(
+                    icon = Icons.Default.Notifications,
+                    label = "Beep Interval",
+                    value = formatBeepInterval(beepInterval),
+                    showChevron = true,
+                    onClick = { showBeepIntervalDialog = true }
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
+
+                // Vibration toggle row
+                SettingsRowWithSwitch(
+                    icon = Icons.Default.Phone,
+                    label = "Vibration",
+                    checked = vibrationEnabled,
+                    onCheckedChange = { enabled ->
+                        vibrationEnabled = enabled
+                        scope.launch {
+                            user?.let {
+                                repository.updateVibrationSetting(it.id, enabled)
+                            }
+                            // Notify AlertService to refresh settings immediately
+                            // This makes the vibration change take effect without restart
+                            AlertService.refreshSettings(context)
+                        }
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ----------------------------------------------------------------
+            // DATA SECTION
+            // Reset demo data
+            // ----------------------------------------------------------------
             SettingsSection(title = "Data") {
                 SettingsRow(
                     icon = Icons.Default.Refresh,
@@ -185,16 +368,20 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // About Section
+            // ----------------------------------------------------------------
+            // ABOUT SECTION
+            // Version and company info
+            // ----------------------------------------------------------------
             SettingsSection(title = "About") {
                 SettingsRow(
                     icon = Icons.Default.Info,
                     label = "Version",
-                    value = "1.0.0"
+                    value = "1.0.0 (Build 1)"
                 )
                 HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
+                // Line ~379-382: Change Apartment to Star
                 SettingsRow(
-                    icon = Icons.Filled.Build,
+                    icon = Icons.Default.Star,   // Changed from Apartment
                     label = "Company",
                     value = "Altron Digital"
                 )
@@ -202,7 +389,9 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Footer
+            // ----------------------------------------------------------------
+            // FOOTER
+            // ----------------------------------------------------------------
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -227,7 +416,278 @@ fun SettingsScreen(
 }
 
 /**
- * A section container for grouping related settings items.
+ * ============================================================================
+ * ProfileCard - User profile display with avatar
+ * ============================================================================
+ * Shows:
+ * - Initials-based avatar (generated from name or email)
+ * - Display name
+ * - Position/job title
+ * - Department
+ * - Edit button
+ */
+@Composable
+private fun ProfileCard(
+    user: User?,
+    onEditClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Avatar - Initials-based (no profile picture upload yet)
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = getInitials(user?.displayName ?: user?.email),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // User Info Column
+            Column(modifier = Modifier.weight(1f)) {
+                // Display name (or email username if no display name)
+                Text(
+                    text = user?.displayName ?: user?.email?.substringBefore("@") ?: "User",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+
+                // Position/Job Title
+                if (user?.position != null) {
+                    Text(
+                        text = user.position,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    )
+                }
+
+                // Department
+                if (user?.department != null) {
+                    Text(
+                        text = user.department,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                    )
+                }
+            }
+
+            // Edit Button
+            IconButton(onClick = onEditClick) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = "Edit Profile",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+    }
+}
+
+/**
+ * ============================================================================
+ * EditProfileDialog - Dialog for editing user profile
+ * ============================================================================
+ * Allows user to edit:
+ * - Display name
+ * - Position/job title
+ * - Department
+ */
+@Composable
+private fun EditProfileDialog(
+    user: User?,
+    onDismiss: () -> Unit,
+    onSave: (displayName: String?, position: String?, department: String?) -> Unit
+) {
+    var displayName by remember { mutableStateOf(user?.displayName ?: "") }
+    var position by remember { mutableStateOf(user?.position ?: "") }
+    var department by remember { mutableStateOf(user?.department ?: "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Profile") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = displayName,
+                    onValueChange = { displayName = it },
+                    label = { Text("Display Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = position,
+                    onValueChange = { position = it },
+                    label = { Text("Position / Job Title") },
+                    placeholder = { Text("e.g., Senior DevOps Engineer") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = department,
+                    onValueChange = { department = it },
+                    label = { Text("Department") },
+                    placeholder = { Text("e.g., Infrastructure, Support") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(
+                        displayName.ifBlank { null },
+                        position.ifBlank { null },
+                        department.ifBlank { null }
+                    )
+                }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * ============================================================================
+ * TwoFactorAuthDialog - Dialog for 2FA toggle
+ * ============================================================================
+ * Shows information about 2FA and allows enabling/disabling.
+ * Note: Full TOTP implementation is for future enhancement.
+ */
+@Composable
+private fun TwoFactorAuthDialog(
+    isEnabled: Boolean,
+    onDismiss: () -> Unit,
+    onToggle2FA: (Boolean) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Two-Factor Authentication") },
+        text = {
+            Column {
+                if (isEnabled) {
+                    Text("Two-factor authentication is currently enabled. This adds an extra layer of security to your account.")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Disabling 2FA will make your account less secure.",
+                        color = AlertBuddyColors.Error
+                    )
+                } else {
+                    Text("Enable two-factor authentication to add an extra layer of security to your account.")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "You will need to enter a verification code from your authenticator app when signing in.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onToggle2FA(!isEnabled) }) {
+                Text(
+                    if (isEnabled) "Disable 2FA" else "Enable 2FA",
+                    color = if (isEnabled) AlertBuddyColors.Error else MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * ============================================================================
+ * BeepIntervalDialog - Dialog for selecting beep interval
+ * ============================================================================
+ * Options:
+ * - 30 seconds
+ * - 1 minute (default)
+ * - 2 minutes
+ * - 5 minutes
+ */
+@Composable
+private fun BeepIntervalDialog(
+    currentInterval: Int,
+    onDismiss: () -> Unit,
+    onSelect: (Int) -> Unit
+) {
+    val intervals = listOf(
+        30 to "30 seconds",
+        60 to "1 minute",
+        120 to "2 minutes",
+        300 to "5 minutes"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Beep Interval") },
+        text = {
+            Column {
+                Text(
+                    "How often should Alert Buddy beep when there are unread alerts?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                intervals.forEach { (seconds, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(seconds) }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = currentInterval == seconds,
+                            onClick = { onSelect(seconds) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(label)
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * ============================================================================
+ * SettingsSection - Container for grouping settings
+ * ============================================================================
  */
 @Composable
 private fun SettingsSection(
@@ -254,7 +714,9 @@ private fun SettingsSection(
 }
 
 /**
- * A single settings row item with icon, label, optional value, and optional click action.
+ * ============================================================================
+ * SettingsRow - Single settings item
+ * ============================================================================
  */
 @Composable
 private fun SettingsRow(
@@ -265,9 +727,15 @@ private fun SettingsRow(
     showChevron: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
-    // Use red color for destructive actions like Sign Out
-    val contentColor = if (isDestructive) ErrorRed else MaterialTheme.colorScheme.onSurface
-    val iconColor = if (isDestructive) ErrorRed else MaterialTheme.colorScheme.onSurfaceVariant
+    val contentColor = if (isDestructive)
+        AlertBuddyColors.Error
+    else
+        MaterialTheme.colorScheme.onSurface
+
+    val iconColor = if (isDestructive)
+        AlertBuddyColors.Error
+    else
+        MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
         modifier = Modifier
@@ -317,5 +785,94 @@ private fun SettingsRow(
                 )
             }
         }
+    }
+}
+
+/**
+ * ============================================================================
+ * SettingsRowWithSwitch - Settings item with toggle switch
+ * ============================================================================
+ */
+@Composable
+private fun SettingsRowWithSwitch(
+    icon: ImageVector,
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
+    }
+}
+
+/**
+ * ============================================================================
+ * Helper Functions
+ * ============================================================================
+ */
+
+/**
+ * Get initials from name or email.
+ * Examples:
+ * - "John Doe" -> "JD"
+ * - "john.doe@altron.com" -> "JD"
+ * - "john" -> "JO"
+ */
+private fun getInitials(nameOrEmail: String?): String {
+    if (nameOrEmail == null) return "?"
+
+    // If it's an email, use the part before @
+    val name = if (nameOrEmail.contains("@")) {
+        nameOrEmail.substringBefore("@")
+    } else {
+        nameOrEmail
+    }
+
+    // Split by spaces or dots and get first letters
+    val parts = name.split(Regex("[\\s.]+")).filter { it.isNotEmpty() }
+    return when {
+        parts.size >= 2 -> "${parts[0].first()}${parts[1].first()}".uppercase()
+        parts.isNotEmpty() -> parts[0].take(2).uppercase()
+        else -> "?"
+    }
+}
+
+/**
+ * Format beep interval for display.
+ */
+private fun formatBeepInterval(seconds: Int): String {
+    return when (seconds) {
+        30 -> "30 seconds"
+        60 -> "1 minute"
+        120 -> "2 minutes"
+        300 -> "5 minutes"
+        else -> "$seconds seconds"
     }
 }

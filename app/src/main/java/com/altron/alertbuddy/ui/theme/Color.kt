@@ -49,6 +49,7 @@ object AlertBuddyColors {
     val Acknowledged = Color(0xFF4CAF50)
     val Unacknowledged = Color(0xFFD32F2F)
 
+
     // Other
     val Divider = Color(0xFFE0E0E0)
     val DividerDark = Color(0xFF424242)

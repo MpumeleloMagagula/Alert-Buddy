@@ -10,6 +10,9 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.altron.alertbuddy.MainActivity
@@ -22,8 +25,8 @@ import kotlinx.coroutines.*
  *
  * PURPOSE:
  * This foreground service runs continuously to ensure critical infrastructure alerts
- * are NEVER missed. It beeps every 60 seconds when there are unread alerts,
- * even when the app is closed, in the background, or the screen is off.
+ * are NEVER missed. It beeps at the user's configured interval when there are unread
+ * alerts, even when the app is closed, in the background, or the screen is off.
  *
  * WHY A FOREGROUND SERVICE?
  * - Android aggressively kills background services to save battery
@@ -36,15 +39,22 @@ import kotlinx.coroutines.*
  *    - User logs in (from MainActivity)
  *    - Device boots up (from BootReceiver, if user was logged in)
  *    - New FCM alert arrives (from AlertFirebaseMessagingService)
+ *    - User changes beep interval (to apply new setting)
  *
  * 2. RUNS continuously:
- *    - Checks database for unread alerts every 60 seconds
+ *    - Checks database for unread alerts at user's configured interval
  *    - Plays alarm sound if unread alerts exist
+ *    - Vibrates if vibration is enabled in user settings
  *    - Updates notification with current unread count
  *
  * 3. STOPS when:
  *    - User logs out (AlertService.stopService called from SettingsScreen)
  *    - All alerts are marked as read (self-stops)
+ *
+ * DYNAMIC SETTINGS:
+ * - Beep interval: Read from user settings (30s, 60s, 120s, or 300s)
+ * - Vibration: Read from user settings (enabled/disabled)
+ * - Settings are refreshed on each beep cycle so changes take effect immediately
  *
  * BEHAVIOR DETAILS:
  * - Shows a persistent notification in the status bar (cannot be swiped away)
@@ -67,9 +77,13 @@ class AlertService : Service() {
         // Separate from alert channels so users can configure independently
         private const val CHANNEL_ID = "alert_buddy_service"
 
-        // How often to check for unread alerts (60 seconds = 1 minute)
-        // This is the core beeping interval
-        private const val BEEP_INTERVAL_MS = 60_000L
+        // Default beep interval if user preference not found (60 seconds)
+        // This is used as fallback when no user is logged in or on first run
+        private const val DEFAULT_BEEP_INTERVAL_MS = 60_000L
+
+        // Intent action to trigger settings refresh without full service restart
+        // Used when user changes beep interval or vibration settings
+        const val ACTION_REFRESH_SETTINGS = "com.altron.alertbuddy.REFRESH_SETTINGS"
 
         /**
          * Start the AlertService as a foreground service.
@@ -108,6 +122,28 @@ class AlertService : Service() {
             val intent = Intent(context, AlertService::class.java)
             context.stopService(intent)
         }
+
+        /**
+         * Notify the service that settings have changed.
+         * This will cause the service to re-read user preferences on the next beep cycle.
+         *
+         * Call this when:
+         * - User changes beep interval in Settings
+         * - User toggles vibration in Settings
+         *
+         * @param context Application context
+         */
+        fun refreshSettings(context: Context) {
+            Log.d(TAG, "refreshSettings() called")
+            val intent = Intent(context, AlertService::class.java).apply {
+                action = ACTION_REFRESH_SETTINGS
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
     }
 
     // Coroutine scope for database operations
@@ -126,14 +162,31 @@ class AlertService : Service() {
     // Flag to track if the periodic beep loop is running
     private var isRunning = false
 
+    // ========================================================================
+    // DYNAMIC USER SETTINGS
+    // These are loaded from the database and can change at runtime
+    // ========================================================================
+
+    // Current beep interval in milliseconds (default 60 seconds)
+    // Updated from user.beepIntervalSeconds when settings are loaded
+    private var currentBeepIntervalMs: Long = DEFAULT_BEEP_INTERVAL_MS
+
+    // Whether to vibrate when beeping (default true)
+    // Updated from user.vibrationEnabled when settings are loaded
+    private var vibrationEnabled: Boolean = true
+
     /**
-     * Runnable that executes the beep check every BEEP_INTERVAL_MS (60 seconds).
+     * Runnable that executes the beep check at the user's configured interval.
      *
      * This is a self-rescheduling runnable:
      * 1. Check for unread alerts
      * 2. Play beep if unread exist
-     * 3. Schedule next check in 60 seconds
-     * 4. Repeat until isRunning becomes false
+     * 3. Vibrate if enabled
+     * 4. Schedule next check using the DYNAMIC interval (not hardcoded!)
+     * 5. Repeat until isRunning becomes false
+     *
+     * IMPORTANT: The interval is read from currentBeepIntervalMs which is
+     * updated from the database on each cycle, so changes take effect immediately.
      */
     private val beepRunnable = object : Runnable {
         override fun run() {
@@ -141,8 +194,10 @@ class AlertService : Service() {
             checkUnreadAndBeep()
 
             // Schedule next execution if service is still running
+            // Uses the DYNAMIC interval from user settings
             if (isRunning) {
-                handler.postDelayed(this, BEEP_INTERVAL_MS)
+                Log.d(TAG, "Scheduling next beep in ${currentBeepIntervalMs}ms (${currentBeepIntervalMs/1000}s)")
+                handler.postDelayed(this, currentBeepIntervalMs)
             }
         }
     }
@@ -163,23 +218,37 @@ class AlertService : Service() {
      *
      * IMPORTANT: Must call startForeground() within 5 seconds of startForegroundService()!
      *
+     * Now handles ACTION_REFRESH_SETTINGS to apply new user preferences.
+     *
      * @param intent The intent used to start the service
      * @param flags Additional flags about this start request
      * @param startId A unique ID for this particular start request
      * @return START_STICKY - tells Android to restart this service if it gets killed
      */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "onStartCommand - Service starting")
+        Log.d(TAG, "onStartCommand - action: ${intent?.action}")
 
         // CRITICAL: Must call startForeground immediately!
         // If we don't call this within 5 seconds of startForegroundService(), the app crashes
         // We show "Checking for alerts..." initially while we query the database
         startForeground(NOTIFICATION_ID, createNotification("Checking for alerts..."))
 
-        // Check for unread alerts in background, then decide what to do
+        // Check if this is a settings refresh request (beep interval or vibration changed)
+        if (intent?.action == ACTION_REFRESH_SETTINGS) {
+            Log.d(TAG, "Settings refresh requested - will apply on next beep cycle")
+            // Settings will be refreshed in the next checkUnreadAndBeep() call
+            // No need to restart the beep loop, it will pick up new values automatically
+            return START_STICKY
+        }
+
+        // Initial startup - load settings and start beep loop
         serviceScope.launch {
             try {
                 val database = AlertBuddyDatabase.getDatabase(applicationContext)
+
+                // Load user's beep interval and vibration preferences
+                loadUserSettings(database)
+
                 val unreadCount = database.messageDao().getTotalUnreadCount()
 
                 // Switch to main thread for UI operations
@@ -187,9 +256,16 @@ class AlertService : Service() {
                     if (unreadCount > 0) {
                         // Has unread alerts - update notification and start the beep loop
                         updateNotification("$unreadCount unread alert${if (unreadCount > 1) "s" else ""} - Tap to view")
-                        isRunning = true
-                        handler.post(beepRunnable)
-                        Log.d(TAG, "Service running - found $unreadCount unread alerts")
+
+                        // Only start beep loop if not already running
+                        // Prevents duplicate loops if service is started multiple times
+                        if (!isRunning) {
+                            isRunning = true
+                            Log.d(TAG, "Starting beep loop with interval: ${currentBeepIntervalMs}ms (${currentBeepIntervalMs/1000}s)")
+                            handler.post(beepRunnable)
+                        }
+
+                        Log.d(TAG, "Service running - found $unreadCount unread alerts, interval: ${currentBeepIntervalMs/1000}s, vibration: $vibrationEnabled")
                     } else {
                         // No unread alerts - no need to keep running
                         Log.d(TAG, "No unread alerts - stopping service")
@@ -205,6 +281,38 @@ class AlertService : Service() {
         // START_STICKY: If the system kills this service due to low memory,
         // Android will restart it automatically when resources become available
         return START_STICKY
+    }
+
+    /**
+     * Load user settings from the database.
+     *
+     * This method reads the user's preferred beep interval and vibration setting
+     * from the User table. It's called:
+     * - On service startup
+     * - On each beep cycle (to pick up settings changes immediately)
+     *
+     * @param database The AlertBuddyDatabase instance
+     */
+    private suspend fun loadUserSettings(database: AlertBuddyDatabase) {
+        try {
+            val user = database.userDao().getCurrentUser()
+            if (user != null) {
+                // Convert seconds to milliseconds for the handler
+                currentBeepIntervalMs = user.beepIntervalSeconds * 1000L
+                vibrationEnabled = user.vibrationEnabled
+                Log.d(TAG, "Loaded user settings - beepInterval: ${user.beepIntervalSeconds}s, vibration: $vibrationEnabled")
+            } else {
+                // No user found (shouldn't happen if service is running, but be safe)
+                Log.d(TAG, "No user found, using default settings")
+                currentBeepIntervalMs = DEFAULT_BEEP_INTERVAL_MS
+                vibrationEnabled = true
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading user settings", e)
+            // Use defaults on error
+            currentBeepIntervalMs = DEFAULT_BEEP_INTERVAL_MS
+            vibrationEnabled = true
+        }
     }
 
     /**
@@ -238,26 +346,40 @@ class AlertService : Service() {
     /**
      * Check the database for unread alerts and play alarm if any exist.
      *
-     * This method is called every 60 seconds by the beepRunnable.
+     * This method is called at the user's configured interval by the beepRunnable.
+     *
+     * IMPORTANT: This method also refreshes user settings on each call,
+     * so changes to beep interval or vibration take effect immediately.
      *
      * LOGIC:
-     * - If unread > 0: Update notification, play alarm sound
+     * - Refresh user settings (beep interval, vibration)
+     * - If unread > 0: Update notification, play alarm sound, vibrate if enabled
      * - If unread == 0: All alerts acknowledged, stop the service
      */
     private fun checkUnreadAndBeep() {
         serviceScope.launch {
             try {
-                // Query database for total unread count
                 val database = AlertBuddyDatabase.getDatabase(applicationContext)
+
+                // Refresh settings on each check - this makes interval/vibration changes
+                // take effect immediately without needing to restart the service
+                loadUserSettings(database)
+
+                // Query database for total unread count
                 val unreadCount = database.messageDao().getTotalUnreadCount()
 
                 // Switch to main thread for notification and sound
                 withContext(Dispatchers.Main) {
                     if (unreadCount > 0) {
                         // Still have unread alerts - BEEP!
-                        Log.d(TAG, "Found $unreadCount unread alert(s) - playing alarm")
+                        Log.d(TAG, "Found $unreadCount unread alert(s) - playing alarm (interval: ${currentBeepIntervalMs/1000}s, vibration: $vibrationEnabled)")
                         updateNotification("$unreadCount unread alert${if (unreadCount > 1) "s" else ""} - Tap to view")
                         playAlertSound()
+
+                        // Vibrate if user has enabled vibration in settings
+                        if (vibrationEnabled) {
+                            vibrate()
+                        }
                     } else {
                         // All alerts have been read - stop service
                         Log.d(TAG, "All alerts acknowledged - stopping service")
@@ -310,6 +432,48 @@ class AlertService : Service() {
             Log.d(TAG, "Alert sound played")
         } catch (e: Exception) {
             Log.e(TAG, "Error playing alert sound", e)
+        }
+    }
+
+    /**
+     * Vibrate the device to get the user's attention.
+     *
+     * Uses a distinctive pattern to differentiate from regular notifications:
+     * - Wait 0ms, vibrate 500ms, wait 200ms, vibrate 500ms
+     *
+     * This creates a "buzz-pause-buzz" pattern that's attention-grabbing
+     * but not too long or annoying.
+     *
+     * Handles both old and new Vibrator APIs for compatibility.
+     */
+    private fun vibrate() {
+        try {
+            // Get the vibrator service - API changed in Android S (API 31)
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vibratorManager.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            }
+
+            // Create vibration pattern: [delay, vibrate, delay, vibrate, ...]
+            // Pattern: wait 0ms, vibrate 500ms, wait 200ms, vibrate 500ms
+            val pattern = longArrayOf(0, 500, 200, 500)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // Use VibrationEffect for Android O and above
+                // -1 means don't repeat (play once)
+                vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+            } else {
+                // Use deprecated vibrate() for older Android versions
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(pattern, -1)
+            }
+
+            Log.d(TAG, "Vibration played")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error vibrating", e)
         }
     }
 

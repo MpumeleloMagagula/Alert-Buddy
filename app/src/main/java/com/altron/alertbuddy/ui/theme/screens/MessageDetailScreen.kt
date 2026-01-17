@@ -22,8 +22,8 @@ import com.altron.alertbuddy.data.AlertRepository
 import com.altron.alertbuddy.data.Message
 import com.altron.alertbuddy.data.Severity
 import com.altron.alertbuddy.service.AlertService
-import com.altron.alertbuddy.ui.theme.AlertBuddyColors
 import com.altron.alertbuddy.ui.theme.getSeverityColor
+import com.altron.alertbuddy.ui.theme.AlertBuddyColors
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.text.SimpleDateFormat

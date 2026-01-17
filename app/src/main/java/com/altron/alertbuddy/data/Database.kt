@@ -3,7 +3,10 @@ package com.altron.alertbuddy.data
 import android.content.Context
 import androidx.room.*
 
-// Type converters for Room to handle Severity enum
+/**
+ * Type converters for Room database.
+ * Converts complex types to/from primitive types that SQLite can store.
+ */
 class Converters {
     @TypeConverter
     fun fromSeverity(severity: Severity): String = severity.name
@@ -12,50 +15,47 @@ class Converters {
     fun toSeverity(value: String): Severity = Severity.valueOf(value)
 }
 
-// DAO for message/alert operations
+/**
+ * Data Access Object for Message/Alert operations.
+ * Provides all database operations for alerts.
+ */
 @Dao
 interface MessageDao {
-    // Get all messages for a channel, newest first
     @Query("SELECT * FROM messages WHERE channelId = :channelId ORDER BY timestamp DESC")
     suspend fun getMessagesForChannel(channelId: String): List<Message>
 
-    // Get single message by ID
     @Query("SELECT * FROM messages WHERE id = :messageId")
     suspend fun getMessage(messageId: String): Message?
 
-    // Get total unread count - used by AlertService to check if beeping should continue
     @Query("SELECT COUNT(*) FROM messages WHERE isRead = 0")
     suspend fun getTotalUnreadCount(): Int
 
-    // Get unread count for a specific channel
     @Query("SELECT COUNT(*) FROM messages WHERE channelId = :channelId AND isRead = 0")
     suspend fun getUnreadCountForChannel(channelId: String): Int
 
-    // Mark a single message as read
     @Query("UPDATE messages SET isRead = 1, acknowledgedAt = :timestamp WHERE id = :messageId")
     suspend fun markAsRead(messageId: String, timestamp: Long = System.currentTimeMillis())
 
-    // Mark all messages in a channel as read
     @Query("UPDATE messages SET isRead = 1, acknowledgedAt = :timestamp WHERE channelId = :channelId")
     suspend fun markAllAsReadForChannel(channelId: String, timestamp: Long = System.currentTimeMillis())
 
-    // Insert a new message (from FCM)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: Message)
 
-    // Insert multiple messages (for demo data)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessages(messages: List<Message>)
 
     @Delete
     suspend fun deleteMessage(message: Message)
 
-    // Clean up old messages
     @Query("DELETE FROM messages WHERE timestamp < :beforeTimestamp")
     suspend fun deleteOldMessages(beforeTimestamp: Long)
 }
 
-// DAO for channel operations
+/**
+ * Data Access Object for Channel operations.
+ * Channels represent different alert sources (Nemo, Infinity, etc.)
+ */
 @Dao
 interface ChannelDao {
     @Query("SELECT * FROM channels ORDER BY name")
@@ -70,7 +70,6 @@ interface ChannelDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertChannels(channels: List<Channel>)
 
-    // Get channels with unread counts, sorted by unread count then last message time
     @Query("""
         SELECT 
             c.id,
@@ -85,25 +84,54 @@ interface ChannelDao {
     suspend fun getChannelsWithUnreadCount(): List<ChannelWithUnreadCount>
 }
 
-// DAO for user operations
+/**
+ * Data Access Object for User operations.
+ * Handles user authentication and profile data.
+ */
 @Dao
 interface UserDao {
-    // Get current logged in user
     @Query("SELECT * FROM users LIMIT 1")
     suspend fun getCurrentUser(): User?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUser(user: User)
 
-    // Clear all users (logout)
+    @Update
+    suspend fun updateUser(user: User)
+
     @Query("DELETE FROM users")
     suspend fun deleteAllUsers()
+
+    // Profile updates
+    @Query("UPDATE users SET displayName = :displayName, position = :position, department = :department WHERE id = :userId")
+    suspend fun updateProfile(userId: String, displayName: String?, position: String?, department: String?)
+
+    // 2FA toggle
+    @Query("UPDATE users SET is2FAEnabled = :enabled WHERE id = :userId")
+    suspend fun update2FAStatus(userId: String, enabled: Boolean)
+
+    // Beep interval update
+    @Query("UPDATE users SET beepIntervalSeconds = :intervalSeconds WHERE id = :userId")
+    suspend fun updateBeepInterval(userId: String, intervalSeconds: Int)
+
+    // Vibration setting update
+    @Query("UPDATE users SET vibrationEnabled = :enabled WHERE id = :userId")
+    suspend fun updateVibrationSetting(userId: String, enabled: Boolean)
 }
 
-// Room Database - main database class
+/**
+ * Room Database for Alert Buddy.
+ *
+ * This is the main database class that provides access to all DAOs.
+ * Uses singleton pattern to ensure only one instance exists.
+ *
+ * MIGRATION NOTE:
+ * When adding new columns to entities, increment the version number
+ * and add a migration object to preserve existing data.
+ */
 @Database(
     entities = [User::class, Channel::class, Message::class],
-    version = 1,
+    version = 2,  // Incremented for new User fields
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -116,14 +144,15 @@ abstract class AlertBuddyDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AlertBuddyDatabase? = null
 
-        // Singleton pattern for database instance
         fun getDatabase(context: Context): AlertBuddyDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AlertBuddyDatabase::class.java,
                     "alert_buddy_database"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration()  // For development - recreates DB on schema change
+                    .build()
                 INSTANCE = instance
                 instance
             }
