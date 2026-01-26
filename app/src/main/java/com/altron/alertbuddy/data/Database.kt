@@ -36,6 +36,9 @@ interface MessageDao {
     @Query("UPDATE messages SET isRead = 1, acknowledgedAt = :timestamp WHERE id = :messageId")
     suspend fun markAsRead(messageId: String, timestamp: Long = System.currentTimeMillis())
 
+    @Query("UPDATE messages SET isRead = 0, acknowledgedAt = NULL WHERE id = :messageId")
+    suspend fun markAsUnread(messageId: String)
+
     @Query("UPDATE messages SET isRead = 1, acknowledgedAt = :timestamp WHERE channelId = :channelId")
     suspend fun markAllAsReadForChannel(channelId: String, timestamp: Long = System.currentTimeMillis())
 
@@ -50,6 +53,21 @@ interface MessageDao {
 
     @Query("DELETE FROM messages WHERE timestamp < :beforeTimestamp")
     suspend fun deleteOldMessages(beforeTimestamp: Long)
+
+    @Query("SELECT COUNT(*) FROM messages")
+    suspend fun getTotalMessageCount(): Int
+
+    @Query("SELECT COUNT(*) FROM messages WHERE severity = :severity")
+    suspend fun getCountBySeverity(severity: String): Int
+
+    @Query("SELECT COUNT(*) FROM messages WHERE timestamp >= :sinceTimestamp")
+    suspend fun getAlertsCountSince(sinceTimestamp: Long): Int
+
+    @Query("SELECT COUNT(*) FROM messages WHERE isRead = 1")
+    suspend fun getAcknowledgedCount(): Int
+
+    @Query("SELECT * FROM messages WHERE isRead = 1 ORDER BY acknowledgedAt DESC, timestamp DESC")
+    suspend fun getAcknowledgedAlerts(): List<Message>
 }
 
 /**

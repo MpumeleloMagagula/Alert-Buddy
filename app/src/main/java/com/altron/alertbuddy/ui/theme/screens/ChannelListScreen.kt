@@ -1,6 +1,8 @@
 package com.altron.alertbuddy.ui.theme.screens
 
-import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -8,10 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -19,20 +18,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.altron.alertbuddy.data.AlertRepository
 import com.altron.alertbuddy.data.ChannelWithUnreadCount
+import com.altron.alertbuddy.data.DashboardStats
+import com.altron.alertbuddy.ui.theme.AlertBuddyColors
 import kotlinx.coroutines.launch
 
-// Color constants for severity and badges
-private val CriticalRed = Color(0xFFDC2626)
-private val BadgeRed = Color(0xFFEF4444)
-
 /**
- * Channel list screen - the main home screen after login.
- * Displays all alert channels with their unread message counts.
- * Shows a warning banner if there are any unread alerts.
+ * ============================================================================
+ * ChannelListScreen.kt - Home Screen with Dashboard & Channels
+ * ============================================================================
+ *
+ * PURPOSE:
+ * Main home screen showing alert channels and dashboard statistics.
+ *
+ * FEATURES:
+ * - Dashboard statistics section (collapsible)
+ * - Channel list with unread badges
+ * - Pull-to-refresh functionality
+ * - Total unread alert banner
+ *
+ * ============================================================================
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,30 +50,25 @@ fun ChannelListScreen(
     onChannelClick: (channelId: String, channelName: String) -> Unit,
     onSettingsClick: () -> Unit
 ) {
-    // State for channels and loading
     var channels by remember { mutableStateOf<List<ChannelWithUnreadCount>>(emptyList()) }
     var totalUnread by remember { mutableStateOf(0) }
+    var dashboardStats by remember { mutableStateOf(DashboardStats()) }
     var isLoading by remember { mutableStateOf(true) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var isDashboardExpanded by remember { mutableStateOf(true) }
 
     val scope = rememberCoroutineScope()
 
-    // Function to load/refresh channel data
     fun loadData() {
         scope.launch {
-            try {
-                channels = repository.getChannelsWithUnreadCount()
-                totalUnread = repository.getTotalUnreadCount()
-            } catch (e: Exception) {
-                Log.e("ChannelListScreen", "Error loading data", e)
-            } finally {
-                isLoading = false
-                isRefreshing = false
-            }
+            channels = repository.getChannelsWithUnreadCount()
+            totalUnread = repository.getTotalUnreadCount()
+            dashboardStats = repository.getDashboardStats()
+            isLoading = false
+            isRefreshing = false
         }
     }
 
-    // Load data on screen launch
     LaunchedEffect(Unit) {
         loadData()
     }
@@ -77,7 +81,6 @@ fun ChannelListScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // App icon in header
                         Surface(
                             modifier = Modifier.size(28.dp),
                             shape = RoundedCornerShape(6.dp),
@@ -99,7 +102,6 @@ fun ChannelListScreen(
                     }
                 },
                 actions = {
-                    // Settings button
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
@@ -108,7 +110,6 @@ fun ChannelListScreen(
         }
     ) { paddingValues ->
         if (isLoading) {
-            // Loading state
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -118,7 +119,6 @@ fun ChannelListScreen(
                 CircularProgressIndicator()
             }
         } else {
-            // Pull-to-refresh enabled list
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
                 onRefresh = {
@@ -134,12 +134,33 @@ fun ChannelListScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Show unread alerts banner if there are any
+                    // Dashboard Statistics Section
+                    item {
+                        DashboardSection(
+                            stats = dashboardStats,
+                            isExpanded = isDashboardExpanded,
+                            onToggle = { isDashboardExpanded = !isDashboardExpanded }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // Unread alert banner
                     if (totalUnread > 0) {
                         item {
                             UnreadBanner(count = totalUnread)
                             Spacer(modifier = Modifier.height(8.dp))
                         }
+                    }
+
+                    // Section header for channels
+                    item {
+                        Text(
+                            text = "ALERT CHANNELS",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
+                        )
                     }
 
                     // Channel list
@@ -150,7 +171,7 @@ fun ChannelListScreen(
                         )
                     }
 
-                    // Empty state when no channels
+                    // Empty state
                     if (channels.isEmpty()) {
                         item {
                             EmptyChannelsState()
@@ -162,15 +183,237 @@ fun ChannelListScreen(
     }
 }
 
-/**
- * Red banner showing total unread alert count.
- * Displayed at the top of the channel list when there are unread alerts.
- */
+// ============================================================================
+// DASHBOARD SECTION
+// ============================================================================
+
+@Composable
+private fun DashboardSection(
+    stats: DashboardStats,
+    isExpanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header with toggle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggle() },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Dashboard",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Icon(
+                    if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Expandable stats content
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(modifier = Modifier.padding(top = 16.dp)) {
+                    // Top row - main stats
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StatCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Default.Notifications,
+                            value = stats.totalAlerts.toString(),
+                            label = "Total Alerts",
+                            iconTint = MaterialTheme.colorScheme.primary
+                        )
+                        StatCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Default.Email,
+                            value = stats.unreadAlerts.toString(),
+                            label = "Unread",
+                            iconTint = if (stats.unreadAlerts > 0) AlertBuddyColors.Critical else MaterialTheme.colorScheme.primary
+                        )
+                        StatCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Default.DateRange,
+                            value = stats.todayAlerts.toString(),
+                            label = "Today",
+                            iconTint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Bottom row - severity breakdown
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SeverityStatCard(
+                            modifier = Modifier.weight(1f),
+                            value = stats.criticalAlerts,
+                            label = "Critical",
+                            color = AlertBuddyColors.Critical
+                        )
+                        SeverityStatCard(
+                            modifier = Modifier.weight(1f),
+                            value = stats.warningAlerts,
+                            label = "Warning",
+                            color = AlertBuddyColors.Warning
+                        )
+                        SeverityStatCard(
+                            modifier = Modifier.weight(1f),
+                            value = stats.infoAlerts,
+                            label = "Info",
+                            color = AlertBuddyColors.Info
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Acknowledge rate progress bar
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Acknowledgement Rate",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${(stats.acknowledgeRate * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AlertBuddyColors.Success
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { stats.acknowledgeRate },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = AlertBuddyColors.Success,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatCard(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    value: String,
+    label: String,
+    iconTint: Color
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SeverityStatCard(
+    modifier: Modifier = Modifier,
+    value: Int,
+    label: String,
+    color: Color
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = color.copy(alpha = 0.1f)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = color,
+                modifier = Modifier.size(10.dp)
+            ) {}
+            Column {
+                Text(
+                    text = value.toString(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+// ============================================================================
+// EXISTING COMPONENTS
+// ============================================================================
+
 @Composable
 private fun UnreadBanner(count: Int) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = CriticalRed,
+        color = AlertBuddyColors.Critical,
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
@@ -194,9 +437,6 @@ private fun UnreadBanner(count: Int) {
     }
 }
 
-/**
- * Individual channel row showing channel name and unread count badge.
- */
 @Composable
 private fun ChannelRow(
     channel: ChannelWithUnreadCount,
@@ -222,7 +462,6 @@ private fun ChannelRow(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
-                // Channel icon - highlighted if has unread
                 Icon(
                     Icons.Default.Notifications,
                     contentDescription = null,
@@ -231,7 +470,6 @@ private fun ChannelRow(
                     else
                         MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                // Channel name - bold if has unread
                 Text(
                     text = channel.name,
                     style = MaterialTheme.typography.bodyLarge,
@@ -243,24 +481,22 @@ private fun ChannelRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Unread count badge
                 if (channel.unreadCount > 0) {
                     Surface(
                         shape = CircleShape,
-                        color = BadgeRed
+                        color = AlertBuddyColors.BadgeBackground
                     ) {
                         Text(
                             text = if (channel.unreadCount > 99) "99+" else channel.unreadCount.toString(),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            color = Color.White,
+                            color = AlertBuddyColors.BadgeText,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
-                // Navigation arrow
                 Icon(
-                    Icons.Filled.KeyboardArrowRight,
+                    Icons.Default.KeyboardArrowRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -269,9 +505,6 @@ private fun ChannelRow(
     }
 }
 
-/**
- * Empty state shown when there are no alert channels.
- */
 @Composable
 private fun EmptyChannelsState() {
     Column(

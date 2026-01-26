@@ -26,8 +26,10 @@ import androidx.compose.ui.unit.sp
 import com.altron.alertbuddy.data.AlertRepository
 import com.altron.alertbuddy.data.User
 import com.altron.alertbuddy.service.AlertService
-import kotlinx.coroutines.launch
 import com.altron.alertbuddy.ui.theme.AlertBuddyColors
+import com.altron.alertbuddy.ui.theme.ThemeMode
+import com.altron.alertbuddy.ui.theme.ThemePreferences
+import kotlinx.coroutines.launch
 
 /**
  * ============================================================================
@@ -65,7 +67,9 @@ import com.altron.alertbuddy.ui.theme.AlertBuddyColors
 fun SettingsScreen(
     repository: AlertRepository,  // Repository for database operations
     onBackClick: () -> Unit,      // Callback to navigate back
-    onLogout: () -> Unit          // Callback to navigate to login screen
+    onLogout: () -> Unit,         // Callback to navigate to login screen
+    onHistoryClick: () -> Unit = {},  // Callback to navigate to alert history
+    onThemeChanged: (ThemeMode) -> Unit = {}  // Callback when theme is changed
 ) {
     // ========================================================================
     // STATE VARIABLES
@@ -80,6 +84,7 @@ fun SettingsScreen(
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var show2FADialog by remember { mutableStateOf(false) }
     var showBeepIntervalDialog by remember { mutableStateOf(false) }
+    var showThemeModeDialog by remember { mutableStateOf(false) }
 
     // Loading state
     var isLoggingOut by remember { mutableStateOf(false) }
@@ -90,6 +95,9 @@ fun SettingsScreen(
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // Theme mode state (must be after context is defined)
+    var themeMode by remember { mutableStateOf(ThemePreferences.getThemeMode(context)) }
 
     // ========================================================================
     // LOAD USER DATA
@@ -242,10 +250,26 @@ fun SettingsScreen(
                         user = repository.getCurrentUser()
                     }
                     // Notify AlertService to refresh settings immediately
-                    // This makes the new beep interval take effect without restart
                     AlertService.refreshSettings(context)
                     showBeepIntervalDialog = false
                 }
+            }
+        )
+    }
+
+    // ========================================================================
+    // THEME MODE SELECTION DIALOG
+    // ========================================================================
+    if (showThemeModeDialog) {
+        ThemeModeDialog(
+            currentMode = themeMode,
+            onDismiss = { showThemeModeDialog = false },
+            onSelect = { mode ->
+                themeMode = mode
+                ThemePreferences.setThemeMode(context, mode)
+                showThemeModeDialog = false
+                // Notify MainActivity to update theme immediately
+                onThemeChanged(mode)
             }
         )
     }
@@ -344,7 +368,6 @@ fun SettingsScreen(
                                 repository.updateVibrationSetting(it.id, enabled)
                             }
                             // Notify AlertService to refresh settings immediately
-                            // This makes the vibration change take effect without restart
                             AlertService.refreshSettings(context)
                         }
                     }
@@ -354,10 +377,42 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // ----------------------------------------------------------------
+            // APPEARANCE SECTION
+            // Dark mode / theme settings
+            // ----------------------------------------------------------------
+            SettingsSection(title = "Appearance") {
+                SettingsRow(
+                    icon = when (themeMode) {
+                        ThemeMode.DARK -> Icons.Default.Star
+                        ThemeMode.LIGHT -> Icons.Default.Face
+                        ThemeMode.SYSTEM -> Icons.Default.Settings
+                    },
+                    label = "Theme",
+                    value = when (themeMode) {
+                        ThemeMode.SYSTEM -> "System"
+                        ThemeMode.LIGHT -> "Light"
+                        ThemeMode.DARK -> "Dark"
+                    },
+                    showChevron = true,
+                    onClick = { showThemeModeDialog = true }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ----------------------------------------------------------------
             // DATA SECTION
-            // Reset demo data
+            // Alert history and reset demo data
             // ----------------------------------------------------------------
             SettingsSection(title = "Data") {
+                SettingsRow(
+                    icon = Icons.Default.CheckCircle,
+                    label = "Alert History",
+                    value = "View acknowledged alerts",
+                    showChevron = true,
+                    onClick = onHistoryClick
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
                 SettingsRow(
                     icon = Icons.Default.Refresh,
                     label = "Reset Demo Data",
@@ -379,9 +434,8 @@ fun SettingsScreen(
                     value = "1.0.0 (Build 1)"
                 )
                 HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
-                // Line ~379-382: Change Apartment to Star
                 SettingsRow(
-                    icon = Icons.Default.Star,   // Changed from Apartment
+                    icon = Icons.Default.Star,
                     label = "Company",
                     value = "Altron Digital"
                 )
@@ -671,6 +725,118 @@ private fun BeepIntervalDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(label)
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * ============================================================================
+ * ThemeModeDialog - Dialog for selecting theme mode
+ * ============================================================================
+ * Options:
+ * - System (follows device setting)
+ * - Light (always light)
+ * - Dark (always dark)
+ */
+@Composable
+private fun ThemeModeDialog(
+    currentMode: ThemeMode,
+    onDismiss: () -> Unit,
+    onSelect: (ThemeMode) -> Unit
+) {
+    val modes = listOf(
+        ThemeMode.SYSTEM to "System default" to "Follow device dark mode setting",
+        ThemeMode.LIGHT to "Light" to "Always use light theme",
+        ThemeMode.DARK to "Dark" to "Always use dark theme"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Theme") },
+        text = {
+            Column {
+                Text(
+                    "Choose your preferred theme:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // System option
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(ThemeMode.SYSTEM) }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = currentMode == ThemeMode.SYSTEM,
+                        onClick = { onSelect(ThemeMode.SYSTEM) }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text("System default")
+                        Text(
+                            "Follow device dark mode setting",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Light option
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(ThemeMode.LIGHT) }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = currentMode == ThemeMode.LIGHT,
+                        onClick = { onSelect(ThemeMode.LIGHT) }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text("Light")
+                        Text(
+                            "Always use light theme",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Dark option
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(ThemeMode.DARK) }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = currentMode == ThemeMode.DARK,
+                        onClick = { onSelect(ThemeMode.DARK) }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text("Dark")
+                        Text(
+                            "Always use dark theme",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

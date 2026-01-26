@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import com.altron.alertbuddy.data.AlertRepository
 import com.altron.alertbuddy.ui.theme.navigation.AlertBuddyNavigation
 import com.altron.alertbuddy.ui.theme.AlertBuddyTheme
+import com.altron.alertbuddy.ui.theme.ThemeMode
+import com.altron.alertbuddy.ui.theme.ThemePreferences
 import com.google.firebase.messaging.FirebaseMessaging
 import android.Manifest
 import android.content.Context
@@ -98,6 +100,9 @@ class MainActivity : ComponentActivity() {
             // Boolean? allows three states: null (loading), true (logged in), false (not logged in)
             var isLoggedIn by remember { mutableStateOf<Boolean?>(null) }
 
+            // Theme mode state - read from preferences
+            var themeMode by remember { mutableStateOf(ThemePreferences.getThemeMode(applicationContext)) }
+
             // LaunchedEffect runs once when the composable enters composition
             // Used here to check if user is already logged in from a previous session
             LaunchedEffect(Unit) {
@@ -118,8 +123,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // Observe theme preference changes
+            // Re-read theme preference when coming back from settings
+            LaunchedEffect(isLoggedIn) {
+                themeMode = ThemePreferences.getThemeMode(applicationContext)
+            }
+
             // Apply the app theme (colors, typography, shapes)
-            AlertBuddyTheme {
+            AlertBuddyTheme(themeMode = themeMode) {
                 // Surface provides the background color from theme
                 Surface(
                     modifier = Modifier
@@ -133,6 +144,10 @@ class MainActivity : ComponentActivity() {
                         AlertBuddyNavigation(
                             repository = repository,
                             isLoggedIn = isLoggedIn!!,
+                            onThemeChanged = { newMode ->
+                                // Update theme immediately when changed in settings
+                                themeMode = newMode
+                            },
                             onLoginSuccess = {
                                 // Called when user successfully logs in
                                 isLoggedIn = true

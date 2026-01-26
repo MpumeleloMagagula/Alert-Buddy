@@ -174,6 +174,26 @@ class AlertRepository(context: Context) {
     }
 
     /**
+     * Mark a single message as read (alias for markAsRead).
+     * Used by swipe-to-acknowledge gesture.
+     *
+     * @param messageId The ID of the message to acknowledge
+     */
+    suspend fun markMessageAsRead(messageId: String) = withContext(Dispatchers.IO) {
+        messageDao.markAsRead(messageId)
+    }
+
+    /**
+     * Mark a single message as unread.
+     * Used when user wants to revisit an alert later.
+     *
+     * @param messageId The ID of the message to mark as unread
+     */
+    suspend fun markMessageAsUnread(messageId: String) = withContext(Dispatchers.IO) {
+        messageDao.markAsUnread(messageId)
+    }
+
+    /**
      * Mark all messages in a channel as read.
      * Used for "Mark All Read" functionality.
      */
@@ -187,6 +207,48 @@ class AlertRepository(context: Context) {
      */
     suspend fun insertMessage(message: Message) = withContext(Dispatchers.IO) {
         messageDao.insertMessage(message)
+    }
+
+    // =====================================================
+    // STATISTICS & DASHBOARD
+    // =====================================================
+
+    /**
+     * Get dashboard statistics for the home screen.
+     * Returns counts of total alerts, unread, and breakdown by severity.
+     */
+    suspend fun getDashboardStats(): DashboardStats = withContext(Dispatchers.IO) {
+        val total = messageDao.getTotalMessageCount()
+        val unread = messageDao.getTotalUnreadCount()
+        val critical = messageDao.getCountBySeverity(Severity.CRITICAL.name)
+        val warning = messageDao.getCountBySeverity(Severity.WARNING.name)
+        val info = messageDao.getCountBySeverity(Severity.INFO.name)
+        val todayAlerts = messageDao.getAlertsCountSince(getTodayStartTimestamp())
+        val acknowledged = messageDao.getAcknowledgedCount()
+
+        DashboardStats(
+            totalAlerts = total,
+            unreadAlerts = unread,
+            criticalAlerts = critical,
+            warningAlerts = warning,
+            infoAlerts = info,
+            todayAlerts = todayAlerts,
+            acknowledgedAlerts = acknowledged
+        )
+    }
+
+    private fun getTodayStartTimestamp(): Long {
+        val now = System.currentTimeMillis()
+        val dayInMillis = 24 * 60 * 60 * 1000L
+        return now - (now % dayInMillis)
+    }
+
+    /**
+     * Get all acknowledged (read) alerts for history view.
+     * Sorted by acknowledged time, most recent first.
+     */
+    suspend fun getAcknowledgedAlerts(): List<Message> = withContext(Dispatchers.IO) {
+        messageDao.getAcknowledgedAlerts()
     }
 
     // =====================================================

@@ -1,33 +1,53 @@
 package com.altron.alertbuddy.ui.theme.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.altron.alertbuddy.data.AlertRepository
+import com.altron.alertbuddy.ui.theme.ThemeMode
 import com.altron.alertbuddy.ui.theme.screens.*
-import com.altron.alertbuddy.ui.theme.screens.*
+
+/**
+ * ============================================================================
+ * Navigation.kt - App Navigation Configuration
+ * ============================================================================
+ *
+ * PURPOSE:
+ * Defines the navigation graph and routes for Alert Buddy.
+ *
+ * SCREENS:
+ * - Login: Authentication screen
+ * - ChannelList: Main screen showing alert channels
+ * - MessageList: List of messages in a channel
+ * - MessageDetail: Detailed view of a single message
+ * - Settings: User settings and preferences
+ * - AlertHistory: View acknowledged alerts
+ *
+ * ============================================================================
+ */
 
 sealed class Screen(val route: String) {
     object Login : Screen("login")
     object ChannelList : Screen("channels")
     object MessageList : Screen("messages/{channelId}/{channelName}") {
-        fun createRoute(channelId: String, channelName: String) =
+        fun createRoute(channelId: String, channelName: String): String =
             "messages/$channelId/${java.net.URLEncoder.encode(channelName, "UTF-8")}"
     }
     object MessageDetail : Screen("message/{messageId}") {
-        fun createRoute(messageId: String) = "message/$messageId"
+        fun createRoute(messageId: String): String = "message/$messageId"
     }
     object Settings : Screen("settings")
+    object AlertHistory : Screen("history")
 }
 
 @Composable
 fun AlertBuddyNavigation(
     repository: AlertRepository,
     isLoggedIn: Boolean,
+    onThemeChanged: (ThemeMode) -> Unit = {},
     onLoginSuccess: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -52,7 +72,7 @@ fun AlertBuddyNavigation(
         composable(Screen.ChannelList.route) {
             ChannelListScreen(
                 repository = repository,
-                onChannelClick = { channelId, channelName ->
+                onChannelClick = { channelId: String, channelName: String ->
                     navController.navigate(Screen.MessageList.createRoute(channelId, channelName))
                 },
                 onSettingsClick = {
@@ -68,8 +88,8 @@ fun AlertBuddyNavigation(
                 navArgument("channelName") { type = NavType.StringType }
             )
         ) { backStackEntry ->
-            val channelId = backStackEntry.arguments?.getString("channelId") ?: ""
-            val channelName = java.net.URLDecoder.decode(
+            val channelId: String = backStackEntry.arguments?.getString("channelId") ?: ""
+            val channelName: String = java.net.URLDecoder.decode(
                 backStackEntry.arguments?.getString("channelName") ?: "",
                 "UTF-8"
             )
@@ -77,7 +97,7 @@ fun AlertBuddyNavigation(
                 repository = repository,
                 channelId = channelId,
                 channelName = channelName,
-                onMessageClick = { messageId ->
+                onMessageClick = { messageId: String ->
                     navController.navigate(Screen.MessageDetail.createRoute(messageId))
                 },
                 onBackClick = { navController.popBackStack() }
@@ -90,7 +110,7 @@ fun AlertBuddyNavigation(
                 navArgument("messageId") { type = NavType.StringType }
             )
         ) { backStackEntry ->
-            val messageId = backStackEntry.arguments?.getString("messageId") ?: ""
+            val messageId: String = backStackEntry.arguments?.getString("messageId") ?: ""
             MessageDetailScreen(
                 repository = repository,
                 messageId = messageId,
@@ -107,6 +127,20 @@ fun AlertBuddyNavigation(
                     navController.navigate(Screen.Login.route) {
                         popUpTo(0) { inclusive = true }
                     }
+                },
+                onHistoryClick = {
+                    navController.navigate(Screen.AlertHistory.route)
+                },
+                onThemeChanged = onThemeChanged
+            )
+        }
+
+        composable(Screen.AlertHistory.route) {
+            AlertHistoryScreen(
+                repository = repository,
+                onBackClick = { navController.popBackStack() },
+                onAlertClick = { messageId: String, _: String, _: String ->
+                    navController.navigate(Screen.MessageDetail.createRoute(messageId))
                 }
             )
         }

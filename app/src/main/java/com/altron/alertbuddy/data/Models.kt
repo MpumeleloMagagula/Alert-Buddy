@@ -120,3 +120,20 @@ data class UserPreferences(
     val notificationSoundUri: String? = null,
     val darkModeEnabled: Boolean = false
 )
+
+/**
+ * Dashboard statistics for the home screen.
+ * Provides a summary of alert counts and status.
+ */
+data class DashboardStats(
+    val totalAlerts: Int = 0,
+    val unreadAlerts: Int = 0,
+    val criticalAlerts: Int = 0,
+    val warningAlerts: Int = 0,
+    val infoAlerts: Int = 0,
+    val todayAlerts: Int = 0,
+    val acknowledgedAlerts: Int = 0
+) {
+    val acknowledgeRate: Float
+        get() = if (totalAlerts > 0) acknowledgedAlerts.toFloat() / totalAlerts else 0f
+}
