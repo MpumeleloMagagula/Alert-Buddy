@@ -13,6 +13,20 @@ class Converters {
 
     @TypeConverter
     fun toSeverity(value: String): Severity = Severity.valueOf(value)
+
+    // Milestone 4: User Role converter
+    @TypeConverter
+    fun fromUserRole(role: UserRole): String = role.name
+
+    @TypeConverter
+    fun toUserRole(value: String): UserRole = UserRole.valueOf(value)
+
+    // Milestone 4: Standby Status converter
+    @TypeConverter
+    fun fromStandbyStatus(status: StandbyStatus): String = status.name
+
+    @TypeConverter
+    fun toStandbyStatus(value: String): StandbyStatus = StandbyStatus.valueOf(value)
 }
 
 /**
@@ -135,6 +149,132 @@ interface UserDao {
     // Vibration setting update
     @Query("UPDATE users SET vibrationEnabled = :enabled WHERE id = :userId")
     suspend fun updateVibrationSetting(userId: String, enabled: Boolean)
+
+    // Milestone 4: Role update
+    @Query("UPDATE users SET role = :role WHERE id = :userId")
+    suspend fun updateUserRole(userId: String, role: String)
+
+    // Milestone 4: Standby status update
+    @Query("UPDATE users SET standbyStatus = :status WHERE id = :userId")
+    suspend fun updateStandbyStatus(userId: String, status: String)
+}
+
+// ============================================================================
+// MILESTONE 4: STANDBY HANDOVER DAOs
+// ============================================================================
+
+/**
+ * Data Access Object for Team Member operations.
+ * Manages team members for standby roster.
+ */
+@Dao
+interface TeamMemberDao {
+    @Query("SELECT * FROM team_members ORDER BY displayName")
+    suspend fun getAllTeamMembers(): List<TeamMember>
+
+    @Query("SELECT * FROM team_members WHERE id = :memberId")
+    suspend fun getTeamMember(memberId: String): TeamMember?
+
+    @Query("SELECT * FROM team_members WHERE standbyStatus = :status")
+    suspend fun getTeamMembersByStatus(status: String): List<TeamMember>
+
+    @Query("SELECT * FROM team_members WHERE standbyStatus = 'ON_STANDBY' LIMIT 1")
+    suspend fun getCurrentStandbyMember(): TeamMember?
+
+    @Query("SELECT * FROM team_members WHERE isCurrentUser = 1 LIMIT 1")
+    suspend fun getCurrentUserAsMember(): TeamMember?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTeamMember(member: TeamMember)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTeamMembers(members: List<TeamMember>)
+
+    @Update
+    suspend fun updateTeamMember(member: TeamMember)
+
+    @Query("UPDATE team_members SET standbyStatus = :status WHERE id = :memberId")
+    suspend fun updateStandbyStatus(memberId: String, status: String)
+
+    @Query("UPDATE team_members SET standbyStatus = 'OFFLINE' WHERE standbyStatus = 'ON_STANDBY'")
+    suspend fun clearAllOnStandby()
+
+    @Query("UPDATE team_members SET lastActiveAt = :timestamp WHERE id = :memberId")
+    suspend fun updateLastActive(memberId: String, timestamp: Long = System.currentTimeMillis())
+
+    @Delete
+    suspend fun deleteTeamMember(member: TeamMember)
+
+    @Query("DELETE FROM team_members WHERE id = :memberId")
+    suspend fun deleteTeamMemberById(memberId: String)
+}
+
+/**
+ * Data Access Object for Shift operations.
+ * Manages standby shift schedules.
+ */
+@Dao
+interface ShiftDao {
+    @Query("SELECT * FROM shifts ORDER BY startTime DESC")
+    suspend fun getAllShifts(): List<Shift>
+
+    @Query("SELECT * FROM shifts WHERE id = :shiftId")
+    suspend fun getShift(shiftId: String): Shift?
+
+    @Query("SELECT * FROM shifts WHERE isActive = 1 LIMIT 1")
+    suspend fun getActiveShift(): Shift?
+
+    @Query("SELECT * FROM shifts WHERE assignedToId = :memberId ORDER BY startTime DESC")
+    suspend fun getShiftsForMember(memberId: String): List<Shift>
+
+    @Query("SELECT * FROM shifts WHERE startTime >= :fromTime ORDER BY startTime ASC")
+    suspend fun getUpcomingShifts(fromTime: Long = System.currentTimeMillis()): List<Shift>
+
+    @Query("SELECT * FROM shifts WHERE startTime >= :fromTime ORDER BY startTime ASC LIMIT 1")
+    suspend fun getNextShift(fromTime: Long = System.currentTimeMillis()): Shift?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertShift(shift: Shift)
+
+    @Update
+    suspend fun updateShift(shift: Shift)
+
+    @Query("UPDATE shifts SET isActive = 0")
+    suspend fun deactivateAllShifts()
+
+    @Query("UPDATE shifts SET isActive = 1 WHERE id = :shiftId")
+    suspend fun activateShift(shiftId: String)
+
+    @Query("UPDATE shifts SET handoverNotes = :notes WHERE id = :shiftId")
+    suspend fun updateHandoverNotes(shiftId: String, notes: String?)
+
+    @Delete
+    suspend fun deleteShift(shift: Shift)
+
+    @Query("DELETE FROM shifts WHERE id = :shiftId")
+    suspend fun deleteShiftById(shiftId: String)
+}
+
+/**
+ * Data Access Object for Handover Log operations.
+ * Tracks shift transitions for audit trail.
+ */
+@Dao
+interface HandoverLogDao {
+    @Query("SELECT * FROM handover_logs ORDER BY handoverAt DESC")
+    suspend fun getAllHandoverLogs(): List<HandoverLog>
+
+    @Query("SELECT * FROM handover_logs ORDER BY handoverAt DESC LIMIT :limit")
+    suspend fun getRecentHandovers(limit: Int = 10): List<HandoverLog>
+
+    @Query("SELECT * FROM handover_logs WHERE fromUserId = :userId OR toUserId = :userId ORDER BY handoverAt DESC")
+    suspend fun getHandoversForUser(userId: String): List<HandoverLog>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHandoverLog(log: HandoverLog)
+
+    @Query("DELETE FROM handover_logs WHERE handoverAt < :beforeTimestamp")
+    suspend fun deleteOldLogs(beforeTimestamp: Long)
 }
 
 /**
@@ -148,8 +288,15 @@ interface UserDao {
  * and add a migration object to preserve existing data.
  */
 @Database(
-    entities = [User::class, Channel::class, Message::class],
-    version = 2,  // Incremented for new User fields
+    entities = [
+        User::class,
+        Channel::class,
+        Message::class,
+        TeamMember::class,  // Milestone 4
+        Shift::class,       // Milestone 4
+        HandoverLog::class  // Milestone 4
+    ],
+    version = 3,  // Incremented for Milestone 4: Standby Handover entities
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -157,6 +304,11 @@ abstract class AlertBuddyDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
     abstract fun channelDao(): ChannelDao
     abstract fun userDao(): UserDao
+
+    // Milestone 4: Standby Handover DAOs
+    abstract fun teamMemberDao(): TeamMemberDao
+    abstract fun shiftDao(): ShiftDao
+    abstract fun handoverLogDao(): HandoverLogDao
 
     companion object {
         @Volatile

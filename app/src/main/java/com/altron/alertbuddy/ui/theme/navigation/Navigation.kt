@@ -41,6 +41,8 @@ sealed class Screen(val route: String) {
     }
     object Settings : Screen("settings")
     object AlertHistory : Screen("history")
+    object Standby : Screen("standby")
+    object ShiftManagement : Screen("shift-management")
 }
 
 @Composable
@@ -131,7 +133,10 @@ fun AlertBuddyNavigation(
                 onHistoryClick = {
                     navController.navigate(Screen.AlertHistory.route)
                 },
-                onThemeChanged = onThemeChanged
+                onThemeChanged = onThemeChanged,
+                onStandbyClick = {
+                    navController.navigate(Screen.Standby.route)
+                }
             )
         }
 
@@ -142,6 +147,25 @@ fun AlertBuddyNavigation(
                 onAlertClick = { messageId: String, _: String, _: String ->
                     navController.navigate(Screen.MessageDetail.createRoute(messageId))
                 }
+            )
+        }
+
+        composable(Screen.Standby.route) {
+            StandbyScreen(
+                repository = repository,
+                currentUser = null, // Will be loaded inside the screen
+                onBackClick = { navController.popBackStack() },
+                onManageShifts = {
+                    navController.navigate(Screen.ShiftManagement.route)
+                }
+            )
+        }
+
+        composable(Screen.ShiftManagement.route) {
+            ShiftManagementScreen(
+                repository = repository,
+                currentUser = null, // Will be loaded inside the screen
+                onBackClick = { navController.popBackStack() }
             )
         }
     }

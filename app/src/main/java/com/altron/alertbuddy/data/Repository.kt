@@ -26,6 +26,11 @@ class AlertRepository(context: Context) {
     private val channelDao = database.channelDao()
     private val userDao = database.userDao()
 
+    // Milestone 4: Standby Handover DAOs
+    private val teamMemberDao = database.teamMemberDao()
+    private val shiftDao = database.shiftDao()
+    private val handoverLogDao = database.handoverLogDao()
+
     // =====================================================
     // USER OPERATIONS
     // =====================================================
@@ -363,5 +368,201 @@ class AlertRepository(context: Context) {
             )
         )
         messageDao.insertMessages(messages)
+    }
+
+    // =====================================================
+    // MILESTONE 4: TEAM MEMBER OPERATIONS
+    // =====================================================
+
+    /**
+     * Get all team members.
+     */
+    suspend fun getAllTeamMembers(): List<TeamMember> = withContext(Dispatchers.IO) {
+        teamMemberDao.getAllTeamMembers()
+    }
+
+    /**
+     * Get team member by ID.
+     */
+    suspend fun getTeamMember(memberId: String): TeamMember? = withContext(Dispatchers.IO) {
+        teamMemberDao.getTeamMember(memberId)
+    }
+
+    /**
+     * Get the currently on-standby team member.
+     */
+    suspend fun getCurrentStandbyMember(): TeamMember? = withContext(Dispatchers.IO) {
+        teamMemberDao.getCurrentStandbyMember()
+    }
+
+    /**
+     * Insert or update a team member.
+     */
+    suspend fun insertTeamMember(member: TeamMember) = withContext(Dispatchers.IO) {
+        teamMemberDao.insertTeamMember(member)
+    }
+
+    /**
+     * Update team member's standby status.
+     */
+    suspend fun updateTeamMemberStandbyStatus(memberId: String, status: StandbyStatus) = withContext(Dispatchers.IO) {
+        teamMemberDao.updateStandbyStatus(memberId, status.name)
+    }
+
+    /**
+     * Set a team member as the current standby person.
+     * Clears previous standby and sets new one.
+     */
+    suspend fun setCurrentStandby(memberId: String) = withContext(Dispatchers.IO) {
+        teamMemberDao.clearAllOnStandby()
+        teamMemberDao.updateStandbyStatus(memberId, StandbyStatus.ON_STANDBY.name)
+    }
+
+    /**
+     * Delete a team member by ID.
+     */
+    suspend fun deleteTeamMember(memberId: String) = withContext(Dispatchers.IO) {
+        teamMemberDao.deleteTeamMemberById(memberId)
+    }
+
+    /**
+     * Initialize demo team members for testing.
+     */
+    suspend fun initializeDemoTeamMembers(currentUserId: String, currentUserEmail: String, currentUserName: String) = withContext(Dispatchers.IO) {
+        val members = listOf(
+            TeamMember(
+                id = currentUserId,
+                email = currentUserEmail,
+                displayName = currentUserName.ifEmpty { currentUserEmail.substringBefore("@") },
+                role = UserRole.ADMIN,
+                standbyStatus = StandbyStatus.ON_STANDBY,
+                isCurrentUser = true
+            ),
+            TeamMember(
+                id = "team-member-2",
+                email = "mpumelelo@altron.com",
+                displayName = "Mpumelelo Nkosi",
+                role = UserRole.USER,
+                standbyStatus = StandbyStatus.AVAILABLE
+            ),
+            TeamMember(
+                id = "team-member-3",
+                email = "thabo@altron.com",
+                displayName = "Thabo Mokoena",
+                role = UserRole.USER,
+                standbyStatus = StandbyStatus.OFFLINE
+            )
+        )
+        teamMemberDao.insertTeamMembers(members)
+    }
+
+    // =====================================================
+    // MILESTONE 4: SHIFT OPERATIONS
+    // =====================================================
+
+    /**
+     * Get all shifts.
+     */
+    suspend fun getAllShifts(): List<Shift> = withContext(Dispatchers.IO) {
+        shiftDao.getAllShifts()
+    }
+
+    /**
+     * Get the currently active shift.
+     */
+    suspend fun getActiveShift(): Shift? = withContext(Dispatchers.IO) {
+        shiftDao.getActiveShift()
+    }
+
+    /**
+     * Get upcoming shifts.
+     */
+    suspend fun getUpcomingShifts(): List<Shift> = withContext(Dispatchers.IO) {
+        shiftDao.getUpcomingShifts()
+    }
+
+    /**
+     * Get the next scheduled shift.
+     */
+    suspend fun getNextShift(): Shift? = withContext(Dispatchers.IO) {
+        shiftDao.getNextShift()
+    }
+
+    /**
+     * Create a new shift.
+     */
+    suspend fun createShift(shift: Shift) = withContext(Dispatchers.IO) {
+        shiftDao.insertShift(shift)
+    }
+
+    /**
+     * Activate a shift (mark it as current).
+     */
+    suspend fun activateShift(shiftId: String) = withContext(Dispatchers.IO) {
+        shiftDao.deactivateAllShifts()
+        shiftDao.activateShift(shiftId)
+    }
+
+    /**
+     * Update handover notes for a shift.
+     */
+    suspend fun updateHandoverNotes(shiftId: String, notes: String?) = withContext(Dispatchers.IO) {
+        shiftDao.updateHandoverNotes(shiftId, notes)
+    }
+
+    /**
+     * Delete a shift.
+     */
+    suspend fun deleteShift(shiftId: String) = withContext(Dispatchers.IO) {
+        shiftDao.deleteShiftById(shiftId)
+    }
+
+    // =====================================================
+    // MILESTONE 4: HANDOVER OPERATIONS
+    // =====================================================
+
+    /**
+     * Perform a handover from one team member to another.
+     * Updates standby status and logs the handover.
+     */
+    suspend fun performHandover(
+        fromMember: TeamMember,
+        toMember: TeamMember,
+        notes: String?
+    ) = withContext(Dispatchers.IO) {
+        // Clear current standby
+        teamMemberDao.updateStandbyStatus(fromMember.id, StandbyStatus.AVAILABLE.name)
+
+        // Set new standby
+        teamMemberDao.updateStandbyStatus(toMember.id, StandbyStatus.ON_STANDBY.name)
+
+        // Get pending alerts count
+        val pendingAlerts = messageDao.getTotalUnreadCount()
+
+        // Log the handover
+        val handoverLog = HandoverLog(
+            id = UUID.randomUUID().toString(),
+            fromUserId = fromMember.id,
+            fromUserName = fromMember.displayName,
+            toUserId = toMember.id,
+            toUserName = toMember.displayName,
+            notes = notes,
+            pendingAlertsCount = pendingAlerts
+        )
+        handoverLogDao.insertHandoverLog(handoverLog)
+    }
+
+    /**
+     * Get recent handover logs.
+     */
+    suspend fun getRecentHandovers(limit: Int = 10): List<HandoverLog> = withContext(Dispatchers.IO) {
+        handoverLogDao.getRecentHandovers(limit)
+    }
+
+    /**
+     * Get handover logs for a specific user.
+     */
+    suspend fun getHandoversForUser(userId: String): List<HandoverLog> = withContext(Dispatchers.IO) {
+        handoverLogDao.getHandoversForUser(userId)
     }
 }

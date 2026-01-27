@@ -69,7 +69,8 @@ fun SettingsScreen(
     onBackClick: () -> Unit,      // Callback to navigate back
     onLogout: () -> Unit,         // Callback to navigate to login screen
     onHistoryClick: () -> Unit = {},  // Callback to navigate to alert history
-    onThemeChanged: (ThemeMode) -> Unit = {}  // Callback when theme is changed
+    onThemeChanged: (ThemeMode) -> Unit = {},  // Callback when theme is changed
+    onStandbyClick: () -> Unit = {}  // Callback to navigate to standby status
 ) {
     // ========================================================================
     // STATE VARIABLES
@@ -371,6 +372,22 @@ fun SettingsScreen(
                             AlertService.refreshSettings(context)
                         }
                     }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ----------------------------------------------------------------
+            // TEAM & STANDBY SECTION
+            // Standby status and team management
+            // ----------------------------------------------------------------
+            SettingsSection(title = "Team & Standby") {
+                SettingsRow(
+                    icon = Icons.Default.Person,
+                    label = "Standby Status",
+                    value = "View who is on call",
+                    showChevron = true,
+                    onClick = onStandbyClick
                 )
             }
 

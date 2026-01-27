@@ -13,6 +13,26 @@ enum class Severity {
 }
 
 /**
+ * User roles for permission management.
+ * Determines what actions a user can perform in the app.
+ */
+enum class UserRole {
+    ADMIN,    // Full access: manage team, shifts, all settings
+    MANAGER,  // Can manage shifts and team members
+    USER      // Basic access: view standby, receive alerts
+}
+
+/**
+ * Standby status for team members.
+ * Tracks whether a team member is available for alerts.
+ */
+enum class StandbyStatus {
+    ON_STANDBY,   // Currently receiving alerts (green)
+    AVAILABLE,    // Online but not on standby (blue)
+    OFFLINE       // Not available (gray)
+}
+
+/**
  * User entity for authentication and profile management.
  *
  * Stores user credentials and profile information locally.
@@ -34,6 +54,10 @@ data class User(
 
     // Profile Picture - stores URI or null for initials-based avatar
     val profilePictureUri: String? = null,
+
+    // Role and Standby Status (Milestone 4)
+    val role: UserRole = UserRole.USER,  // Permission level
+    val standbyStatus: StandbyStatus = StandbyStatus.OFFLINE,  // Current availability
 
     // Two-Factor Authentication
     val is2FAEnabled: Boolean = false,
@@ -137,3 +161,115 @@ data class DashboardStats(
     val acknowledgeRate: Float
         get() = if (totalAlerts > 0) acknowledgedAlerts.toFloat() / totalAlerts else 0f
 }
+
+// ============================================================================
+// MILESTONE 4: STANDBY HANDOVER ENTITIES
+// ============================================================================
+
+/**
+ * Team Member entity for standby roster management.
+ *
+ * Represents a team member who can be assigned to standby shifts.
+ * Separate from User entity to allow managing team without local login.
+ */
+@Entity(tableName = "team_members")
+data class TeamMember(
+    @PrimaryKey
+    val id: String,
+
+    val email: String,
+    val displayName: String,
+    val role: UserRole = UserRole.USER,
+    val standbyStatus: StandbyStatus = StandbyStatus.OFFLINE,
+
+    // Contact info for escalation
+    val phoneNumber: String? = null,
+
+    // Is this the currently logged-in user?
+    val isCurrentUser: Boolean = false,
+
+    // Last seen / activity timestamp
+    val lastActiveAt: Long = System.currentTimeMillis(),
+
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+/**
+ * Shift entity for standby schedule management.
+ *
+ * Represents a standby shift assignment.
+ * Can be used for scheduled shifts or manual handovers.
+ */
+@Entity(
+    tableName = "shifts",
+    foreignKeys = [
+        ForeignKey(
+            entity = TeamMember::class,
+            parentColumns = ["id"],
+            childColumns = ["assignedToId"],
+            onDelete = ForeignKey.SET_NULL
+        )
+    ],
+    indices = [Index("assignedToId")]
+)
+data class Shift(
+    @PrimaryKey
+    val id: String,
+
+    // Who is assigned to this shift
+    val assignedToId: String?,
+    val assignedToName: String,
+
+    // Shift timing
+    val startTime: Long,  // Epoch timestamp
+    val endTime: Long,    // Epoch timestamp
+
+    // Shift status
+    val isActive: Boolean = false,  // Currently active shift
+
+    // Handover notes from previous shift
+    val handoverNotes: String? = null,
+
+    // Who created this shift (Admin/Manager)
+    val createdById: String,
+    val createdByName: String,
+
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+/**
+ * Handover Log entity for tracking shift transitions.
+ *
+ * Records when responsibility is passed from one person to another.
+ * Useful for audit trail and handover history.
+ */
+@Entity(tableName = "handover_logs")
+data class HandoverLog(
+    @PrimaryKey
+    val id: String,
+
+    // Who handed over
+    val fromUserId: String,
+    val fromUserName: String,
+
+    // Who received handover
+    val toUserId: String,
+    val toUserName: String,
+
+    // Handover details
+    val notes: String? = null,
+    val pendingAlertsCount: Int = 0,
+
+    // Timestamp
+    val handoverAt: Long = System.currentTimeMillis()
+)
+
+/**
+ * Data class for displaying team member with shift info.
+ * Used in the standby status screen.
+ */
+data class TeamMemberWithShift(
+    val member: TeamMember,
+    val currentShift: Shift?,
+    val isOnStandby: Boolean
+)
