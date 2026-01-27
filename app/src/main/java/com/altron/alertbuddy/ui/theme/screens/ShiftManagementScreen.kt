@@ -39,11 +39,12 @@ import java.util.*
 @Composable
 fun ShiftManagementScreen(
     repository: AlertRepository,
-    currentUser: User?,
+    currentUser: User? = null,
     onBackClick: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
 
+    var loggedInUser by remember { mutableStateOf(currentUser) }
     var teamMembers by remember { mutableStateOf<List<TeamMember>>(emptyList()) }
     var shifts by remember { mutableStateOf<List<Shift>>(emptyList()) }
     var handoverLogs by remember { mutableStateOf<List<HandoverLog>>(emptyList()) }
@@ -57,6 +58,12 @@ fun ShiftManagementScreen(
     fun loadData() {
         scope.launch {
             isLoading = true
+
+            // Load current user from repository if not passed
+            if (loggedInUser == null) {
+                loggedInUser = repository.getCurrentUser()
+            }
+
             teamMembers = repository.getAllTeamMembers()
             shifts = repository.getAllShifts()
             handoverLogs = repository.getRecentHandovers(20)
@@ -128,7 +135,7 @@ fun ShiftManagementScreen(
                 when (selectedTab) {
                     0 -> TeamMembersTab(
                         members = teamMembers,
-                        currentUserId = currentUser?.id,
+                        currentUserId = loggedInUser?.id,
                         onEditRole = { showEditRoleDialog = it },
                         onDelete = { member ->
                             scope.launch {
@@ -189,7 +196,7 @@ fun ShiftManagementScreen(
     if (showCreateShiftDialog) {
         CreateShiftDialog(
             teamMembers = teamMembers,
-            currentUser = currentUser,
+            currentUser = loggedInUser,
             onDismiss = { showCreateShiftDialog = false },
             onConfirm = { shift ->
                 scope.launch {

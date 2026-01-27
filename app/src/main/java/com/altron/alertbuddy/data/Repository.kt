@@ -46,6 +46,7 @@ class AlertRepository(context: Context) {
     /**
      * Sign in a user with the given email.
      * Creates a new user record in the local database.
+     * The first user to sign in is automatically made an ADMIN.
      *
      * @param email User's email address
      * @return The created User object
@@ -54,6 +55,7 @@ class AlertRepository(context: Context) {
         val user = User(
             id = UUID.randomUUID().toString(),
             email = email,
+            role = UserRole.ADMIN,  // First user is admin by default
             lastLoginAt = System.currentTimeMillis()
         )
         userDao.insertUser(user)

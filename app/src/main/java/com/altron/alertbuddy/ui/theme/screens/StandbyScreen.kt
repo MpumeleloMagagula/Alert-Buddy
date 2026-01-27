@@ -38,12 +38,13 @@ import kotlinx.coroutines.launch
 @Composable
 fun StandbyScreen(
     repository: AlertRepository,
-    currentUser: User?,
+    currentUser: User? = null,
     onBackClick: () -> Unit,
     onManageShifts: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
 
+    var loggedInUser by remember { mutableStateOf(currentUser) }
     var teamMembers by remember { mutableStateOf<List<TeamMember>>(emptyList()) }
     var currentStandby by remember { mutableStateOf<TeamMember?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -54,14 +55,21 @@ fun StandbyScreen(
     fun loadData() {
         scope.launch {
             isLoading = true
+
+            // Load current user from repository if not passed
+            if (loggedInUser == null) {
+                loggedInUser = repository.getCurrentUser()
+            }
+
             teamMembers = repository.getAllTeamMembers()
             currentStandby = repository.getCurrentStandbyMember()
 
-            if (teamMembers.isEmpty() && currentUser != null) {
+            // Initialize demo team members if none exist
+            if (teamMembers.isEmpty() && loggedInUser != null) {
                 repository.initializeDemoTeamMembers(
-                    currentUserId = currentUser.id,
-                    currentUserEmail = currentUser.email,
-                    currentUserName = currentUser.displayName ?: ""
+                    currentUserId = loggedInUser!!.id,
+                    currentUserEmail = loggedInUser!!.email,
+                    currentUserName = loggedInUser!!.displayName ?: ""
                 )
                 teamMembers = repository.getAllTeamMembers()
                 currentStandby = repository.getCurrentStandbyMember()
@@ -75,7 +83,8 @@ fun StandbyScreen(
     }
 
     val isCurrentUserOnStandby = currentStandby?.isCurrentUser == true
-    val canManageShifts = currentUser?.role == UserRole.ADMIN || currentUser?.role == UserRole.MANAGER
+    // Admin always has access; also check the user's role from User entity
+    val canManageShifts = loggedInUser?.role == UserRole.ADMIN || loggedInUser?.role == UserRole.MANAGER
 
     Scaffold(
         topBar = {
